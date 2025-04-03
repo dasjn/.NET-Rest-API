@@ -1,4 +1,6 @@
-﻿namespace IA.WebAPI.Models.DTOs
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace IA.WebAPI.Models.DTOs
 {
     /// <summary>
     /// DTO para enviar un nuevo comentario
@@ -8,11 +10,12 @@
         /// <summary>
         /// Contenido del comentario
         /// </summary>
+        [Required(ErrorMessage = "El contenido del comentario es obligatorio")]
+        [StringLength(500, MinimumLength = 1, ErrorMessage = "El comentario debe tener entre 1 y 500 caracteres")]
         public required string Content { get; set; }
 
         /// <summary>
-        /// ID del comentario padre (para respuestas a comentarios)
-        /// Null si es un comentario de primer nivel
+        /// ID del comentario padre para respuestas (opcional)
         /// </summary>
         public long? ParentCommentId { get; set; }
     }

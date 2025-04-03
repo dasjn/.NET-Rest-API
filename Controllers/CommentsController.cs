@@ -28,9 +28,13 @@ namespace IA.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Obtiene todos los comentarios de primer nivel de un video
+        /// Obtiene todos los comentarios de un video
         /// </summary>
+        /// <param name="videoId">ID del video</param>
+        /// <returns>Lista de comentarios del video</returns>
         [HttpGet]
+        [ProducesResponseType(typeof(IEnumerable<CommentDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<IEnumerable<CommentDto>>> GetVideoComments(long videoId)
         {
             try
@@ -96,8 +100,14 @@ namespace IA.WebAPI.Controllers
         /// <summary>
         /// Añade un nuevo comentario a un video
         /// </summary>
+        /// <param name="videoId">ID del video</param>
+        /// <param name="commentDto">Datos del comentario a crear</param>
+        /// <returns>Comentario recién creado</returns>
         [Authorize]
         [HttpPost]
+        [ProducesResponseType(typeof(CommentDto), StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<ActionResult<CommentDto>> AddComment(long videoId, CreateCommentDto commentDto)
         {
             var userId = GetCurrentUserId();

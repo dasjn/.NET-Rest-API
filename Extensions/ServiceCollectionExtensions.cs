@@ -176,19 +176,19 @@ namespace IA.WebAPI.Extensions
                 });
 
                 c.AddSecurityRequirement(new OpenApiSecurityRequirement
+        {
+            {
+                new OpenApiSecurityScheme
                 {
+                    Reference = new OpenApiReference
                     {
-                        new OpenApiSecurityScheme
-                        {
-                            Reference = new OpenApiReference
-                            {
-                                Type = ReferenceType.SecurityScheme,
-                                Id = "Bearer"
-                            }
-                        },
-                        Array.Empty<string>()
+                        Type = ReferenceType.SecurityScheme,
+                        Id = "Bearer"
                     }
-                });
+                },
+                Array.Empty<string>()
+            }
+        });
 
                 // Incluir comentarios XML para documentación
                 var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
@@ -198,7 +198,10 @@ namespace IA.WebAPI.Extensions
                     c.IncludeXmlComments(xmlPath);
                 }
 
-                c.OperationFilter<SwaggerFileOperationFilter>(); // Filtro para manejo de archivos
+                // Filtro para manejar archivos en Swagger
+                c.OperationFilter<SwaggerFileOperationFilter>();
+                // Filtro de esquema personalizado para mejorar la documentación
+                c.SchemaFilter<SwaggerSchemaFilter>();
             });
 
             return services;

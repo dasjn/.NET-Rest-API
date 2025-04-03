@@ -35,7 +35,9 @@ namespace IA.WebAPI.Controllers
         /// <summary>
         /// Obtiene los videos que le gustan al usuario autenticado
         /// </summary>
+        /// <returns>Lista de videos que le gustan al usuario</returns>
         [HttpGet("likes")]
+        [ProducesResponseType(typeof(IEnumerable<Video>), StatusCodes.Status200OK)]
         public async Task<ActionResult<IEnumerable<Video>>> GetUserLikedVideos()
         {
             return await GetVideosByInteractionType(InteractionType.Like);
@@ -99,9 +101,13 @@ namespace IA.WebAPI.Controllers
         #region Agregar o quitar interacciones
 
         /// <summary>
-        /// Agrega una interacción de tipo Like a un video
+        /// Agrega una interacción de like a un video
         /// </summary>
+        /// <param name="videoId">ID del video a dar like</param>
+        /// <returns>Resultado de la operación</returns>
         [HttpPost("like/{videoId}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult> LikeVideo(long videoId)
         {
             return await AddInteraction(videoId, InteractionType.Like, "like");
