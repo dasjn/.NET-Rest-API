@@ -1,0 +1,7 @@
+﻿*.mkv
+*.mp4
+*.json
+Uploads
+bin
+logs
+obj
