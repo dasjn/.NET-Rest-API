@@ -14,6 +14,11 @@ namespace IA.WebAPI.Models.Auth
         public string? UserId { get; set; }
 
         /// <summary>
+        /// ID único del usuario en nuestra base de datos
+        /// </summary>
+        public string? InternalId { get; set; }
+
+        /// <summary>
         /// Correo electrónico del usuario
         /// </summary>
         public string? Email { get; set; }
@@ -22,6 +27,11 @@ namespace IA.WebAPI.Models.Auth
         /// Nombre del usuario
         /// </summary>
         public string? Name { get; set; }
+
+        /// <summary>
+        /// URL de la imagen de perfil
+        /// </summary>
+        public string? ProfilePictureUrl { get; set; }
     }
 
     /// <summary>

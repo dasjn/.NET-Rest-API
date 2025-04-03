@@ -152,7 +152,11 @@ namespace IA.WebAPI.Controllers
                 });
 
                 // Generar token JWT
-                var jwtToken = _authService.GenerateJwtToken(userInfo.Id, userInfo.Email, userInfo.Name);
+                var (jwtToken, userInfoModel) = await _authService.AuthenticateUserAsync(
+                    userInfo.Id,
+                    userInfo.Email,
+                    userInfo.Name,
+                    userInfo.Picture);
                 _logger.LogInformation("Usuario {Email} autenticado exitosamente", userInfo.Email);
 
                 // Redireccionar al frontend con el token
