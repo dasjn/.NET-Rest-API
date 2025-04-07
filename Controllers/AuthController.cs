@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using System.Web;
 using IA.WebAPI.Models.Auth;
 using IA.WebAPI.Options;
 using IA.WebAPI.Services;
@@ -231,9 +233,28 @@ namespace IA.WebAPI.Controllers
         /// </summary>
         private IActionResult RedirectToLoginCallback(string token)
         {
-            var callbackUrl = $"{_authOptions.FrontendBaseUrl}{_authOptions.LoginCallbackPath}?token={Uri.EscapeDataString(token)}";
-            _logger.LogDebug("Redirigiendo a callback de login: {CallbackUrl}", callbackUrl);
-            return Redirect(callbackUrl);
+            // Decodificar el token para obtener información adicional si es necesario
+            var handler = new JwtSecurityTokenHandler();
+            var jwtToken = handler.ReadJwtToken(token);
+
+            // Obtener claims importantes
+            var email = jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+            var name = jwtToken.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value;
+            var internalId = jwtToken.Claims.FirstOrDefault(c => c.Type == "InternalId")?.Value;
+
+            // Construir URL de callback con información adicional
+            var callbackUrl = new UriBuilder($"{_authOptions.FrontendBaseUrl}{_authOptions.LoginCallbackPath}");
+
+            var query = HttpUtility.ParseQueryString(callbackUrl.Query);
+            query["token"] = Uri.EscapeDataString(token);
+            query["email"] = Uri.EscapeDataString(email ?? "");
+            query["name"] = Uri.EscapeDataString(name ?? "");
+            query["internalId"] = Uri.EscapeDataString(internalId ?? "");
+
+            callbackUrl.Query = query.ToString();
+
+            _logger.LogDebug("Redirigiendo a callback de login: {CallbackUrl}", callbackUrl.ToString());
+            return Redirect(callbackUrl.ToString());
         }
 
         /// <summary>

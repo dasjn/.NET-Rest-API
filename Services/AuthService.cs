@@ -146,40 +146,28 @@ namespace IA.WebAPI.Services
         /// <inheritdoc/>
         public string GenerateJwtToken(UserInfoModel user)
         {
-            try
+            var claims = new List<Claim>
             {
-                var claims = new List<Claim>
-                {
-                    new Claim(ClaimTypes.NameIdentifier, user.UserId ?? string.Empty),
-                    new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
-                    new Claim(ClaimTypes.Name, user.Name ?? string.Empty)
-                };
+                new Claim(ClaimTypes.NameIdentifier, user.UserId ?? string.Empty),
+                new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
+                new Claim(ClaimTypes.Name, user.Name ?? string.Empty),
+                new Claim("InternalId", user.InternalId ?? string.Empty),
+                new Claim("ProfilePictureUrl", user.ProfilePictureUrl ?? string.Empty)
+            };
 
-                // Añadir el ID interno como claim
-                if (!string.IsNullOrEmpty(user.InternalId))
-                {
-                    claims.Add(new Claim("InternalId", user.InternalId));
-                }
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.Key));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+            var expires = DateTime.UtcNow.AddMinutes(_jwtOptions.ExpiryInMinutes);
 
-                var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.Key));
-                var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-                var expires = DateTime.UtcNow.AddMinutes(_jwtOptions.ExpiryInMinutes);
+            var token = new JwtSecurityToken(
+                issuer: _jwtOptions.Issuer,
+                audience: _jwtOptions.Audience,
+                claims: claims,
+                expires: expires,
+                signingCredentials: creds
+            );
 
-                var token = new JwtSecurityToken(
-                    issuer: _jwtOptions.Issuer,
-                    audience: _jwtOptions.Audience,
-                    claims: claims,
-                    expires: expires,
-                    signingCredentials: creds
-                );
-
-                return new JwtSecurityTokenHandler().WriteToken(token);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error al generar token JWT");
-                throw;
-            }
+            return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
         /// <inheritdoc/>

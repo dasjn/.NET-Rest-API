@@ -3,6 +3,7 @@ using IA.WebAPI.Models;
 using IA.WebAPI.Options;
 using IA.WebAPI.Services;
 using IA.WebAPI.Swagger;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
@@ -207,14 +208,15 @@ namespace IA.WebAPI.Extensions
             return services;
         }
 
-        private static IServiceCollection AddAppAuthentication(this IServiceCollection services, IConfiguration configuration)
+        public static IServiceCollection AddAppAuthentication(this IServiceCollection services, IConfiguration configuration)
         {
             // Obtener y validar opciones de autenticación
             var authOptions = configuration.GetAuthOptions();
 
             services.AddAuthentication(options =>
             {
-                options.DefaultScheme = "ApplicationCookie";
+                // Establecer JWT como esquema predeterminado
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
                 options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
             })
             .AddCookie("ApplicationCookie", options =>
@@ -226,6 +228,21 @@ namespace IA.WebAPI.Extensions
                 options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
                 options.Cookie.IsEssential = true;
                 options.Cookie.Name = "IA.AuthCookie";
+
+                // Establecer un manejador de eventos para debugging
+                options.Events = new CookieAuthenticationEvents
+                {
+                    OnRedirectToLogin = context =>
+                    {
+                        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        return Task.CompletedTask;
+                    },
+                    OnRedirectToAccessDenied = context =>
+                    {
+                        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                        return Task.CompletedTask;
+                    }
+                };
             })
             .AddJwtBearer(options =>
             {
@@ -238,39 +255,24 @@ namespace IA.WebAPI.Extensions
                     ValidIssuer = authOptions.Jwt.Issuer,
                     ValidAudience = authOptions.Jwt.Audience,
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(authOptions.Jwt.Key)),
-                    ClockSkew = TimeSpan.FromMinutes(2), // Reducir a 2 minutos para mayor seguridad
+                    ClockSkew = TimeSpan.FromMinutes(2),
                     RequireExpirationTime = true,
-                    RequireSignedTokens = true,
-
-                    // Validar el claim 'nbf' (not before time)
-                    RequireAudience = true,
-                    ValidateTokenReplay = true  // Prevenir replay attacks
+                    RequireSignedTokens = true
                 };
 
-                // Configuración adicional de seguridad
-                options.SaveToken = true;
-                options.RequireHttpsMetadata = true;  // Requerir HTTPS
-
-                // Eventos mejorados para auditoría
+                // Configuración de eventos para debugging
                 options.Events = new JwtBearerEvents
                 {
                     OnAuthenticationFailed = context =>
                     {
-                        var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
-                        logger.LogWarning(context.Exception, "JWT authentication failed: {Message}", context.Exception.Message);
                         return Task.CompletedTask;
                     },
                     OnTokenValidated = context =>
                     {
-                        var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
-                        logger.LogInformation("JWT validated successfully for {Subject}",
-                            context.Principal?.Identity?.Name ?? "unknown user");
                         return Task.CompletedTask;
                     },
                     OnChallenge = context =>
                     {
-                        var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<JwtBearerEvents>>();
-                        logger.LogInformation("JWT challenge issued to client");
                         return Task.CompletedTask;
                     }
                 };
