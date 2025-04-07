@@ -1,0 +1,20 @@
+﻿@using MudBlazor
+
+<MudButton Variant="Variant.Text"
+           Color="@(IsLiked ? Color.Primary : Color.Default)"
+           OnClick="HandleClick">
+    <MudIcon Icon="@(IsLiked ? Icons.Material.Filled.ThumbUp : Icons.Material.Outlined.ThumbUp)"
+             Class="mr-2" />
+    <span>@(Count > 0 ? Count.ToString() : "Me gusta")</span>
+</MudButton>
+
+@code {
+    [Parameter] public bool IsLiked { get; set; }
+    [Parameter] public int Count { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    private async Task HandleClick()
+    {
+        await OnClick.InvokeAsync();
+    }
+}

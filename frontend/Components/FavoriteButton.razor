@@ -1,0 +1,20 @@
+﻿@using MudBlazor
+
+<MudButton Variant="Variant.Text"
+           Color="@(IsFavorite ? Color.Secondary : Color.Default)"
+           OnClick="HandleClick">
+    <MudIcon Icon="@(IsFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+             Class="mr-2" />
+    <span>@(Count > 0 ? Count.ToString() : "Favorito")</span>
+</MudButton>
+
+@code {
+    [Parameter] public bool IsFavorite { get; set; }
+    [Parameter] public int Count { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    private async Task HandleClick()
+    {
+        await OnClick.InvokeAsync();
+    }
+}

@@ -1,0 +1,24 @@
+﻿@using MudBlazor
+
+<MudChip T="string" Icon="@Icons.Material.Filled.Visibility" 
+         Color="Color.Default" 
+         Variant="Variant.Text">
+    <span>@FormatViewCount(Count)</span>
+</MudChip>
+
+@code {
+    [Parameter] public int Count { get; set; }
+    
+    private string FormatViewCount(int count)
+    {
+        if (count >= 1_000_000)
+        {
+            return $"{count / 1_000_000.0:0.#}M vistas";
+        }
+        if (count >= 1_000)
+        {
+            return $"{count / 1_000.0:0.#}K vistas";
+        }
+        return $"{count} vistas";
+    }
+}

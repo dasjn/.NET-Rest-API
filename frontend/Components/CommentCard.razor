@@ -1,37 +1,132 @@
 ﻿@using MudBlazor
+@using IA.FrontEnd.Models
 @using System
 
-<MudItem>
-    <MudCard Class="bg-transparent" Square Elevation="0">
-        <MudCardContent Class="p-0">
-            <MudStack Spacing="3" Row="true" Class="h-100">
-                <UserAvatar />
+<MudPaper Class="pa-3 mb-2" Elevation="0">
+    <MudStack Spacing="3" Row="true" Class="h-100">
+        <MudAvatar Image="@(string.IsNullOrEmpty(Comment.UserProfilePictureUrl) ? "https://avatar.iran.liara.run/public/job/doctor/male" : Comment.UserProfilePictureUrl)"
+                   Style="width: 40px; height: 40px;" />
 
-                <!-- Título y descripción con truncamiento de varias líneas -->
-                <MudStack Spacing="1" Style="flex-grow: 1;">
-                    <MudText Typo="Typo.h6"
-                             Style="display: -webkit-box;
-                                        -webkit-line-clamp: 1;
-                                        -webkit-box-orient: vertical;
-                                        overflow: hidden;
-                                        text-overflow: ellipsis;"
-                             Title="Username">
-                        Username
-                    </MudText>
-                    <MudText Typo="Typo.body2"
-                             Style="display: -webkit-box;
-                                        -webkit-line-clamp: 4;
-                                        -webkit-box-orient: vertical;
-                                        overflow: hidden;
-                                        text-overflow: ellipsis;"
-                             Title="Comment">
-                        Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem. Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur? Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur, vel illum qui dolorem eum fugiat quo voluptas nulla pariatur?
-                    </MudText>
-                </MudStack>
+        <MudStack Spacing="1" Style="flex-grow: 1;">
+            <MudStack Row="true" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.subtitle1">@Comment.UserName</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Surface" Style="opacity: 0.6;">
+                    @(Comment.IsEdited ? "Editado" : "") @GetTimeAgo(Comment.CreatedAt)
+                </MudText>
             </MudStack>
-        </MudCardContent>
-    </MudCard>
-</MudItem>
+
+            @if (IsEditing)
+            {
+                <MudTextField @bind-Value="EditText" Immediate="true" Variant="Variant.Outlined"
+                              Lines="3" AutoSize="true" Margin="Margin.Dense" />
+                <MudStack Row="true">
+                    <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="SaveEdit">Guardar</MudButton>
+                    <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="CancelEdit">Cancelar</MudButton>
+                </MudStack>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2">@Comment.Content</MudText>
+
+                <MudStack Row="true" Class="mt-1">
+                    @if (ShowReplyButton)
+                    {
+                        <MudButton Variant="Variant.Text" Size="Size.Small"
+                                   OnClick="() => OnReplyClick.InvokeAsync(Comment.Id)">
+                            Responder
+                        </MudButton>
+                    }
+
+                    @if (Comment.IsOwnComment)
+                    {
+                        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="StartEdit">
+                            Editar
+                        </MudButton>
+                        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Error"
+                                   OnClick="() => OnDeleteClick.InvokeAsync(Comment.Id)">
+                            Eliminar
+                        </MudButton>
+                    }
+                </MudStack>
+            }
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@if (Comment.Replies.Any() && ShowReplies)
+{
+    <MudStack Class="ml-6">
+        @foreach (var reply in Comment.Replies)
+        {
+            <CommentCard Comment="reply"
+                         OnReplyClick="OnReplyClick"
+                         OnEditClick="OnEditClick"
+                         OnDeleteClick="OnDeleteClick"
+                         OnSaveEdit="OnSaveEdit"
+                         ShowReplyButton="false"
+                         ShowReplies="false" />
+        }
+    </MudStack>
+}
 
 @code {
+    [Parameter] public CommentDto Comment { get; set; } = null!;
+    [Parameter] public EventCallback<long> OnReplyClick { get; set; }
+    [Parameter] public EventCallback<long> OnEditClick { get; set; }
+    [Parameter] public EventCallback<long> OnDeleteClick { get; set; }
+    [Parameter] public EventCallback<(long, string)> OnSaveEdit { get; set; }
+    [Parameter] public bool ShowReplyButton { get; set; } = true;
+    [Parameter] public bool ShowReplies { get; set; } = true;
+
+    private bool IsEditing = false;
+    private string EditText = string.Empty;
+
+    private void StartEdit()
+    {
+        IsEditing = true;
+        EditText = Comment.Content;
+        OnEditClick.InvokeAsync(Comment.Id);
+    }
+
+    private async Task SaveEdit()
+    {
+        if (!string.IsNullOrWhiteSpace(EditText))
+        {
+            await OnSaveEdit.InvokeAsync((Comment.Id, EditText));
+            IsEditing = false;
+        }
+    }
+
+    private void CancelEdit()
+    {
+        IsEditing = false;
+    }
+
+    private string GetTimeAgo(DateTime dateTime)
+    {
+        var span = DateTime.Now - dateTime;
+
+        if (span.TotalDays > 365)
+        {
+            return $"hace {(int)(span.TotalDays / 365)} año(s)";
+        }
+        if (span.TotalDays > 30)
+        {
+            return $"hace {(int)(span.TotalDays / 30)} mes(es)";
+        }
+        if (span.TotalDays > 1)
+        {
+            return $"hace {(int)span.TotalDays} día(s)";
+        }
+        if (span.TotalHours > 1)
+        {
+            return $"hace {(int)span.TotalHours} hora(s)";
+        }
+        if (span.TotalMinutes > 1)
+        {
+            return $"hace {(int)span.TotalMinutes} minuto(s)";
+        }
+
+        return "hace un momento";
+    }
 }

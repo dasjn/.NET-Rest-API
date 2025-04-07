@@ -1,0 +1,19 @@
+﻿@using MudBlazor
+
+<MudButton Variant="Variant.Text"
+           Color="@(IsInWatchLater ? Color.Info : Color.Default)"
+           OnClick="HandleClick">
+    <MudIcon Icon="@(IsInWatchLater ? Icons.Material.Filled.WatchLater : Icons.Material.Outlined.WatchLater)"
+             Class="mr-2" />
+    <span>@(IsInWatchLater ? "Guardado" : "Ver más tarde")</span>
+</MudButton>
+
+@code {
+    [Parameter] public bool IsInWatchLater { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    private async Task HandleClick()
+    {
+        await OnClick.InvokeAsync();
+    }
+}

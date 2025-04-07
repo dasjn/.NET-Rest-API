@@ -272,6 +272,30 @@ namespace IA.WebAPI.Controllers
             _logger.LogDebug("Redirigiendo a página de error: {FailedUrl}", url);
             return Redirect(url);
         }
+
+        /// <summary>
+        /// Refresca el token JWT
+        /// </summary>
+        [HttpPost("refresh-token")]
+        public IActionResult RefreshToken([FromBody] string token)
+        {
+            try
+            {
+                // Validate the existing token
+                var userInfo = _authService.ValidateToken(token);
+
+                if (userInfo == null)
+                    return Unauthorized();
+
+                // Generate a new token
+                var newToken = _authService.GenerateJwtToken(userInfo);
+                return Ok(newToken);
+            }
+            catch
+            {
+                return Unauthorized();
+            }
+        }
     }
 }
 

@@ -2,21 +2,29 @@
 @using System
 
 <MudItem xs="12" sm="12" md="12" Style="overflow: hidden;" Class="pb-3">
-    <MudLink Href="@($"/video/{Uri.EscapeDataString(VideoUri)}")">
-        <MudCard Class="bg-transparent" Square Elevation="0" >
+    <MudLink Href="@($"/video/{VideoId}")">
+        <MudCard Class="bg-transparent" Square Elevation="0">
             <MudCardContent Class="p-0">
                 <MudStack Spacing="3" Row="true" Style="height: 100%; width: 100%;">
                     <MudContainer class="align-items-center d-flex p-0" Style="flex: 0 0 40%;">
-                        @* <video controls style="max-width: 100%; height: auto; border-radius: 10px;">
-                            <source src="@VideoUri" type="video/mp4">
-                            Your browser does not support the video tag.
-                        </video> *@
-                        <MudImage ObjectFit="ObjectFit.Cover" Src="https://picsum.photos/200/300"
-                                   ObjectPosition="ObjectPosition.Center"
-                                  Elevation="0"
-                                  Class="rounded-2 w-100"
-                                  Style="aspect-ratio: 16/9;" />
-
+                        @if (!string.IsNullOrEmpty(VideoUri))
+                        {
+                            <MudImage ObjectFit="ObjectFit.Cover"
+                                      Src="@GetVideoThumbnail()"
+                                      ObjectPosition="ObjectPosition.Center"
+                                      Elevation="0"
+                                      Class="rounded-2 w-100"
+                                      Style="aspect-ratio: 16/9;" />
+                        }
+                        else
+                        {
+                            <MudImage ObjectFit="ObjectFit.Cover"
+                                      Src="https://picsum.photos/200/300"
+                                      ObjectPosition="ObjectPosition.Center"
+                                      Elevation="0"
+                                      Class="rounded-2 w-100"
+                                      Style="aspect-ratio: 16/9;" />
+                        }
                     </MudContainer>
 
                     <MudStack Spacing="1" Style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start;">
@@ -47,6 +55,15 @@
 
 @code {
     [Parameter] public string VideoUri { get; set; } = string.Empty;
+    [Parameter] public long VideoId { get; set; }
     [Parameter] public string Name { get; set; } = string.Empty;
     [Parameter] public string Description { get; set; } = string.Empty;
+
+    private string GetVideoThumbnail()
+    {
+        // En una implementación real, podríamos generar un thumbnail del video
+        // o usar un endpoint específico para thumbnails
+        // Por ahora, usamos una imagen aleatoria
+        return "https://picsum.photos/400/225?random=" + VideoId;
+    }
 }

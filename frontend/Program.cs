@@ -5,33 +5,52 @@ using IA.FrontEnd.Services;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using MudBlazor;
 using MudBlazor.Services;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
+// Configurar HttpClient
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
-// Configure HttpClient to use the base URL of your API
-builder.Services.AddScoped(sp => new HttpClient{BaseAddress = new Uri("https://localhost:7113/") });
 
-// Registrar el servicio de autenticación personalizado
-builder.Services.AddScoped<CustomAuthStateProvider>();
-builder.Services.AddScoped<AuthenticationStateProvider>(provider =>
-    provider.GetRequiredService<CustomAuthStateProvider>());
-builder.Services.AddScoped<AuthService>();
+// Configuración
+builder.Services.AddSingleton(provider =>
+{
+    var config = provider.GetRequiredService<IConfiguration>();
+    var apiBaseUrl = config["ApiBaseUrl"] ?? "https://localhost:7113";
+    return new ConfigurationSettings { ApiBaseUrl = apiBaseUrl };
+});
 
-// VideoService
-builder.Services.AddScoped<VideoService>();
-
-// Agregar la autenticación
+// Servicios de autenticación
+builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();
 builder.Services.AddAuthorizationCore();
 
-// Mudblazor library
-builder.Services.AddMudServices();
+// Servicios de la aplicación
+builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<VideoService>();
+builder.Services.AddScoped<VideoInteractionService>();
 
-// Viewmodels register
+// ViewModels
 builder.Services.AddSingleton<MainLayoutVM>();
+
+// Servicios de MudBlazor
+builder.Services.AddMudServices(config =>
+{
+    config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.BottomRight;
+    config.SnackbarConfiguration.PreventDuplicates = true;
+    config.SnackbarConfiguration.NewestOnTop = true;
+    config.SnackbarConfiguration.ShowCloseIcon = true;
+    config.SnackbarConfiguration.VisibleStateDuration = 3000;
+    config.SnackbarConfiguration.HideTransitionDuration = 200;
+    config.SnackbarConfiguration.ShowTransitionDuration = 200;
+    config.SnackbarConfiguration.SnackbarVariant = Variant.Filled;
+});
 
 await builder.Build().RunAsync();
 
+public class ConfigurationSettings
+{
+    public string ApiBaseUrl { get; set; } = string.Empty;
+}

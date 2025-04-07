@@ -1,80 +1,522 @@
-﻿@page "/video/{Uri}"
-@inject HttpClient Http
+﻿@page "/video/{VideoId:long}"
 @using IA.FrontEnd.Components
 @using IA.FrontEnd.Models
+@using IA.FrontEnd.Services
+@inject VideoInteractionService InteractionService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
 
-@if (!string.IsNullOrEmpty(VideoUri))
-{
-    <MudGrid Spacing="3">
-        <MudItem xs="12" md="9">
-            @if (!string.IsNullOrEmpty(VideoUri))
-            {
-                <MudStack Spacing="3">
-                    <video controls style="width: 100%" class="rounded-2">
-                        <source src="@VideoUri" type="video/mp4">
-                        Your browser does not support the video tag.
-                    </video>
-                    <MudStack Spacing="3" Class="p-4 ">
-                        <MudText Typo="Typo.h6">Comentarios</MudText>
-                        <CommentCard/>
-                        <CommentCard/>
-                        <CommentCard />
-                    </MudStack>
+<PageTitle>@(videoDetails?.Name ?? "Cargando video...")</PageTitle>
+
+<MudGrid Spacing="3">
+    <MudItem xs="12" md="9">
+        @if (isLoading)
+        {
+            <MudStack Spacing="2">
+                <MudSkeleton Animation="Animation.Wave" SkeletonType="SkeletonType.Rectangle" Width="100%" Height="500px" />
+                <MudSkeleton Animation="Animation.Wave" SkeletonType="SkeletonType.Text" Width="50%" Height="60px" />
+                <MudSkeleton Animation="Animation.Wave" SkeletonType="SkeletonType.Text" Width="100%" Height="80px" />
+            </MudStack>
+        }
+        else if (videoDetails != null)
+        {
+            <MudStack Spacing="3">
+                <video controls style="width: 100%; border-radius: 8px;" autoplay
+                       @onplaying="RegisterVideoView">
+                    <source src="@GetVideoUrl(videoDetails.Uri)" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+
+                <MudText Typo="Typo.h4">@videoDetails.Name</MudText>
+
+                <MudStack Row="true" AlignItems="AlignItems.Center">
+                    <MudAvatar Style="margin-right: 8px;">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" />
+                    </MudAvatar>
+                    <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                        @(videoDetails.UploadedByUserName ?? "Usuario")
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Surface" Style="opacity: 0.6; margin-left: 16px;">
+                        Publicado el @videoDetails.PublishDate.ToString("dd/MM/yyyy")
+                    </MudText>
                 </MudStack>
-            }
-            else
-            {
-                <p>Loading video...</p>
-            }
-        </MudItem>
 
-        <MudItem xs="12" md="3">
-            @if (relatedVideos == null) return;
-            @foreach (var video in relatedVideos)
-            {
-                <VideoCardHorizontal VideoUri="@video.Uri.ToString()"
-                                     Name="@video.Name"
-                                     Description="@video.Description" />
-                <VideoCardHorizontal VideoUri="@video.Uri.ToString()"
-                                     Name="@video.Name"
-                                     Description="@video.Description" />
-                <VideoCardHorizontal VideoUri="@video.Uri.ToString()"
-                                     Name="@video.Name"
-                                     Description="@video.Description" />
-                <VideoCardHorizontal VideoUri="@video.Uri.ToString()"
-                                     Name="@video.Name"
-                                     Description="@video.Description" />
-            }
-        </MudItem>
-    </MudGrid>
-}
-else
-{
-    <p>Loading video...</p>
-}
+                <VideoInteractionButtons IsLiked="videoDetails.UserHasLiked"
+                                         LikesCount="videoDetails.LikesCount"
+                                         IsFavorite="videoDetails.UserHasFavorited"
+                                         FavoritesCount="videoDetails.FavoritesCount"
+                                         IsInWatchLater="videoDetails.UserHasWatchLater"
+                                         ViewsCount="videoDetails.ViewsCount"
+                                         OnLikeClick="HandleLikeClick"
+                                         OnFavoriteClick="HandleFavoriteClick"
+                                         OnWatchLaterClick="HandleWatchLaterClick" />
+
+                @if (!string.IsNullOrEmpty(videoDetails.Description))
+                {
+                    <MudExpansionPanels>
+                        <MudExpansionPanel Text="Descripción">
+                            <MudText Typo="Typo.body1">@videoDetails.Description</MudText>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+                }
+
+                <MudDivider />
+
+                <MudText Typo="Typo.h6">
+                    Comentarios (@videoDetails.CommentsCount)
+                </MudText>
+
+                <CommentForm VideoId="@VideoId"
+                             ReplyToCommentId="@replyToCommentId"
+                             ReplyToUserName="@replyToUserName"
+                             OnCommentSubmit="HandleCommentSubmit"
+                             OnCancelReply="CancelReply" />
+
+                @if (isCommentsLoading)
+                {
+                    <MudStack Spacing="3">
+                        @for (int i = 0; i < 3; i++)
+                        {
+                            <MudSkeleton Animation="Animation.Wave" SkeletonType="SkeletonType.Rectangle" Height="100px" />
+                        }
+                    </MudStack>
+                }
+                else if (!comments.Any())
+                {
+                    <MudAlert Severity="Severity.Info">No hay comentarios todavía. ¡Sé el primero en comentar!</MudAlert>
+                }
+                else
+                {
+                    <MudStack Spacing="3">
+                        @foreach (var comment in comments.Where(c => c.ParentCommentId == null))
+                        {
+                            <CommentCard Comment="comment"
+                                         OnReplyClick="HandleReplyClick"
+                                         OnEditClick="HandleEditClick"
+                                         OnDeleteClick="HandleDeleteClick"
+                                         OnSaveEdit="HandleSaveEdit" />
+                        }
+                    </MudStack>
+                }
+            </MudStack>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Error">El video no se encuentra disponible.</MudAlert>
+        }
+    </MudItem>
+
+    <MudItem xs="12" md="3">
+        <MudText Typo="Typo.h6" Class="mb-3">Videos recomendados</MudText>
+
+        @if (isRelatedVideosLoading)
+        {
+            <MudStack Spacing="2">
+                @for (int i = 0; i < 4; i++)
+                {
+                    <MudSkeleton Animation="Animation.Wave" SkeletonType="SkeletonType.Rectangle" Height="100px" />
+                }
+            </MudStack>
+        }
+        else if (relatedVideos?.Any() == true)
+        {
+            <MudStack Spacing="2">
+                @foreach (var video in relatedVideos)
+                {
+                    <VideoCardHorizontal VideoUri="@video.Uri"
+                                         VideoId="@video.Id"
+                                         Name="@video.Name"
+                                         Description="@video.Description" />
+                }
+            </MudStack>
+        }
+    </MudItem>
+</MudGrid>
 
 @code {
-    [Parameter]
-    public string Uri { get; set; }
+    [Parameter] public long VideoId { get; set; }
 
-    private string? VideoUri;
-
-    protected override void OnParametersSet()
-    {
-        // Decodificar la URL si es necesario
-        if (!string.IsNullOrEmpty(Uri))
-        {
-            VideoUri = Uri;
-        }
-    }
+    private VideoDto? videoDetails;
+    private List<CommentDto> comments = new();
+    private List<VideoDto> relatedVideos = new();
 
     private bool isLoading = true;
-    private List<Video>? relatedVideos;
-    private Dictionary<int, bool> isLoadingImages = new();
+    private bool isCommentsLoading = true;
+    private bool isRelatedVideosLoading = true;
+
+    private long? replyToCommentId;
+    private string? replyToUserName;
 
     protected override async Task OnInitializedAsync()
     {
-        relatedVideos = await Http.GetFromJsonAsync<List<Video>>("https://localhost:7113/api/Videos");
-        isLoading = false;
+        await LoadVideoDetails();
+        await LoadComments();
+        await LoadRelatedVideos();
     }
+
+    protected override void OnParametersSet()
+    {
+        if (VideoId > 0)
+        {
+            // Solo recargar si el VideoId ha cambiado (navegación entre videos relacionados)
+            Task.Run(async () =>
+            {
+                await LoadVideoDetails();
+                await LoadComments();
+                await LoadRelatedVideos();
+
+                // Resetear estado de UI
+                replyToCommentId = null;
+                replyToUserName = null;
+
+                await InvokeAsync(StateHasChanged);
+            });
+        }
+    }
+
+    private async Task LoadVideoDetails()
+    {
+        isLoading = true;
+        try
+        {
+            videoDetails = await InteractionService.GetVideoDetails(VideoId);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar el video: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadComments()
+    {
+        isCommentsLoading = true;
+        try
+        {
+            comments = await InteractionService.GetVideoComments(VideoId);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar los comentarios: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isCommentsLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadRelatedVideos()
+    {
+        isRelatedVideosLoading = true;
+        try
+        {
+            // En una implementación real, habría un endpoint específico para videos relacionados
+            // Por ahora, simplemente obtenemos algunos videos y filtramos el actual
+            var allVideos = await InteractionService.GetAllVideos();
+            relatedVideos = allVideos?.Where(v => v.Id != VideoId).Take(5).ToList() ?? new List<VideoDto>();
+        }
+        catch
+        {
+            // Silenciar errores, los videos relacionados no son críticos
+            relatedVideos = new List<VideoDto>();
+        }
+        finally
+        {
+            isRelatedVideosLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetVideoUrl(string uri)
+    {
+        if (uri.StartsWith("http"))
+            return uri;
+
+        return $"https://localhost:7113/{uri.Replace("\\", "/")}";
+    }
+
+    #region Comment Handlers
+
+    private async Task HandleCommentSubmit((string content, long? parentCommentId) data)
+    {
+        try
+        {
+            var (content, parentId) = data;
+
+            var result = await InteractionService.AddComment(VideoId, content, parentId);
+            if (result != null)
+            {
+                // Actualizar comentarios
+                await LoadComments();
+
+                // Actualizar contador de comentarios
+                if (videoDetails != null)
+                {
+                    videoDetails.CommentsCount++;
+                }
+
+                // Limpiar estado de respuesta
+                replyToCommentId = null;
+                replyToUserName = null;
+
+                Snackbar.Add("Comentario publicado correctamente", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("No se pudo publicar el comentario", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al publicar comentario: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void HandleReplyClick(long commentId)
+    {
+        var comment = FindComment(commentId);
+        if (comment != null)
+        {
+            replyToCommentId = commentId;
+            replyToUserName = comment.UserName;
+        }
+    }
+
+    private void HandleEditClick(long commentId)
+    {
+        // Esta lógica se maneja en el CommentCard
+    }
+
+    private async Task HandleSaveEdit((long commentId, string content) data)
+    {
+        var (commentId, content) = data;
+
+        try
+        {
+            var success = await InteractionService.UpdateComment(VideoId, commentId, content);
+            if (success)
+            {
+                await LoadComments();
+                Snackbar.Add("Comentario actualizado correctamente", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("No se pudo actualizar el comentario", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al actualizar comentario: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleDeleteClick(long commentId)
+    {
+        try
+        {
+            var success = await InteractionService.DeleteComment(VideoId, commentId);
+            if (success)
+            {
+                await LoadComments();
+
+                // Actualizar contador de comentarios
+                if (videoDetails != null)
+                {
+                    // Restar 1 por el comentario principal, y también restar las respuestas si las había
+                    var comment = FindComment(commentId);
+                    int commentsToSubtract = 1; // El comentario principal
+                    if (comment != null)
+                    {
+                        commentsToSubtract += comment.Replies.Count; // Más sus respuestas
+                    }
+
+                    videoDetails.CommentsCount = Math.Max(0, videoDetails.CommentsCount - commentsToSubtract);
+                }
+
+                Snackbar.Add("Comentario eliminado correctamente", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("No se pudo eliminar el comentario", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al eliminar comentario: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void CancelReply()
+    {
+        replyToCommentId = null;
+        replyToUserName = null;
+    }
+
+    private CommentDto? FindComment(long commentId)
+    {
+        // Primero buscar en comentarios principales
+        var comment = comments.FirstOrDefault(c => c.Id == commentId);
+        if (comment != null)
+            return comment;
+
+        // Si no se encuentra, buscar en respuestas
+        foreach (var parentComment in comments)
+        {
+            var reply = parentComment.Replies.FirstOrDefault(r => r.Id == commentId);
+            if (reply != null)
+                return reply;
+        }
+
+        return null;
+    }
+
+    #endregion
+
+    #region Video Interaction Handlers
+
+    private async Task RegisterVideoView()
+    {
+        if (videoDetails == null || videoDetails.UserHasViewed)
+            return;
+
+        try
+        {
+            var success = await InteractionService.RegisterVideoView(VideoId);
+            if (success)
+            {
+                // Actualizar estado local
+                videoDetails.UserHasViewed = true;
+                videoDetails.ViewsCount++;
+            }
+        }
+        catch
+        {
+            // Silenciar errores de vista, no crítico para la UX
+        }
+    }
+
+    private async Task HandleLikeClick(bool shouldLike)
+    {
+        if (videoDetails == null) return;
+
+        try
+        {
+            bool success;
+
+            if (shouldLike)
+            {
+                success = await InteractionService.LikeVideo(VideoId);
+                if (success)
+                {
+                    videoDetails.UserHasLiked = true;
+                    videoDetails.LikesCount++;
+                    Snackbar.Add("Video añadido a Me gusta", Severity.Success);
+                }
+            }
+            else
+            {
+                success = await InteractionService.UnlikeVideo(VideoId);
+                if (success)
+                {
+                    videoDetails.UserHasLiked = false;
+                    videoDetails.LikesCount--;
+                    Snackbar.Add("Video eliminado de Me gusta", Severity.Info);
+                }
+            }
+
+            if (!success)
+            {
+                Snackbar.Add("No se pudo completar la acción", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleFavoriteClick(bool shouldFavorite)
+    {
+        if (videoDetails == null) return;
+
+        try
+        {
+            bool success;
+
+            if (shouldFavorite)
+            {
+                success = await InteractionService.AddToFavorites(VideoId);
+                if (success)
+                {
+                    videoDetails.UserHasFavorited = true;
+                    videoDetails.FavoritesCount++;
+                    Snackbar.Add("Video añadido a Favoritos", Severity.Success);
+                }
+            }
+            else
+            {
+                success = await InteractionService.RemoveFromFavorites(VideoId);
+                if (success)
+                {
+                    videoDetails.UserHasFavorited = false;
+                    videoDetails.FavoritesCount--;
+                    Snackbar.Add("Video eliminado de Favoritos", Severity.Info);
+                }
+            }
+
+            if (!success)
+            {
+                Snackbar.Add("No se pudo completar la acción", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleWatchLaterClick(bool shouldAddToWatchLater)
+    {
+        if (videoDetails == null) return;
+
+        try
+        {
+            bool success;
+
+            if (shouldAddToWatchLater)
+            {
+                success = await InteractionService.AddToWatchLater(VideoId);
+                if (success)
+                {
+                    videoDetails.UserHasWatchLater = true;
+                    Snackbar.Add("Video añadido a Ver más tarde", Severity.Success);
+                }
+            }
+            else
+            {
+                success = await InteractionService.RemoveFromWatchLater(VideoId);
+                if (success)
+                {
+                    videoDetails.UserHasWatchLater = false;
+                    Snackbar.Add("Video eliminado de Ver más tarde", Severity.Info);
+                }
+            }
+
+            if (!success)
+            {
+                Snackbar.Add("No se pudo completar la acción", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    #endregion
 }

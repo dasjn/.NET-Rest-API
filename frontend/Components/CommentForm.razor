@@ -1,0 +1,99 @@
+﻿@using MudBlazor
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthStateProvider
+
+<MudPaper Class="pa-3 mb-4" Elevation="0">
+    <MudStack Row="true" AlignItems="AlignItems.Start">
+        <MudAvatar Image="@UserProfileImage" Style="width: 40px; height: 40px;" />
+
+        <MudStack Style="flex-grow: 1;">
+            <MudTextField @bind-Value="CommentText"
+                          Label="@GetLabel()"
+                          Placeholder="Escribe un comentario..."
+                          Variant="Variant.Outlined"
+                          Lines="3"
+                          Counter="500"
+                          MaxLength="500"
+                          Immediate="true"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@Icons.Material.Filled.Send"
+                          OnAdornmentClick="SubmitComment"
+                          AutoFocus="@IsReply" />
+
+            <MudStack Row="true" Class="justify-end">
+                @if (IsReply)
+                {
+                    <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="CancelReply">
+                        Cancelar
+                    </MudButton>
+                }
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           OnClick="SubmitComment"
+                           Disabled="string.IsNullOrWhiteSpace(CommentText)">
+                    Comentar
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter] public long VideoId { get; set; }
+    [Parameter] public long? ReplyToCommentId { get; set; }
+    [Parameter] public string? ReplyToUserName { get; set; }
+    [Parameter] public EventCallback<(string, long?)> OnCommentSubmit { get; set; }
+    [Parameter] public EventCallback OnCancelReply { get; set; }
+
+    private string CommentText { get; set; } = string.Empty;
+    private string UserProfileImage { get; set; } = "https://avatar.iran.liara.run/public/job/doctor/male";
+
+    private bool IsReply => ReplyToCommentId.HasValue;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            // Si hay una foto de perfil en los claims, usarla
+            var profilePicClaim = user.FindFirst("ProfilePictureUrl");
+            if (profilePicClaim != null && !string.IsNullOrEmpty(profilePicClaim.Value))
+            {
+                UserProfileImage = profilePicClaim.Value;
+            }
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Si es una respuesta y hay usuario, agregar mención
+        if (IsReply && !string.IsNullOrEmpty(ReplyToUserName) && string.IsNullOrEmpty(CommentText))
+        {
+            CommentText = $"@{ReplyToUserName} ";
+        }
+    }
+
+    private string GetLabel()
+    {
+        return IsReply
+            ? $"Respondiendo a {ReplyToUserName}"
+            : "Añadir un comentario";
+    }
+
+    private async Task SubmitComment()
+    {
+        if (!string.IsNullOrWhiteSpace(CommentText))
+        {
+            await OnCommentSubmit.InvokeAsync((CommentText, ReplyToCommentId));
+            CommentText = string.Empty;
+        }
+    }
+
+    private async Task CancelReply()
+    {
+        CommentText = string.Empty;
+        await OnCancelReply.InvokeAsync();
+    }
+}

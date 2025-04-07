@@ -1,0 +1,44 @@
+﻿@using MudBlazor
+@using Microsoft.AspNetCore.Components.Rendering
+
+<MudPaper Class="pa-3 mb-4" Elevation="0">
+    <MudStack Row="true" Justify="Justify.SpaceBetween">
+        <MudStack Row="true">
+            <LikeButton IsLiked="IsLiked" Count="LikesCount" OnClick="HandleLikeClick" />
+            <FavoriteButton IsFavorite="IsFavorite" Count="FavoritesCount" OnClick="HandleFavoriteClick" />
+        </MudStack>
+        
+        <MudStack Row="true">
+            <WatchLaterButton IsInWatchLater="IsInWatchLater" OnClick="HandleWatchLaterClick" />
+            <ViewsCounter Count="ViewsCount" />
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter] public bool IsLiked { get; set; }
+    [Parameter] public int LikesCount { get; set; }
+    [Parameter] public bool IsFavorite { get; set; }
+    [Parameter] public int FavoritesCount { get; set; }
+    [Parameter] public bool IsInWatchLater { get; set; }
+    [Parameter] public int ViewsCount { get; set; }
+    
+    [Parameter] public EventCallback<bool> OnLikeClick { get; set; }
+    [Parameter] public EventCallback<bool> OnFavoriteClick { get; set; }
+    [Parameter] public EventCallback<bool> OnWatchLaterClick { get; set; }
+    
+    private async Task HandleLikeClick()
+    {
+        await OnLikeClick.InvokeAsync(!IsLiked);
+    }
+    
+    private async Task HandleFavoriteClick()
+    {
+        await OnFavoriteClick.InvokeAsync(!IsFavorite);
+    }
+    
+    private async Task HandleWatchLaterClick()
+    {
+        await OnWatchLaterClick.InvokeAsync(!IsInWatchLater);
+    }
+}

@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.JSInterop;
 
@@ -33,12 +36,64 @@ namespace IA.FrontEnd.Auth
 
             try
             {
+                // Check if token is close to expiration
+                if (IsTokenExpired(token))
+                {
+                    // Attempt to refresh token
+                    var newToken = await RefreshTokenAsync(token);
+                    if (!string.IsNullOrEmpty(newToken))
+                    {
+                        token = newToken;
+                        await SetTokenAsync(token);
+                    }
+                    else
+                    {
+                        // If token refresh fails, log out
+                        await LogoutAsync();
+                        return _anonymous;
+                    }
+                }
+
                 return BuildAuthState(token);
             }
             catch
             {
                 await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", _tokenKey);
                 return _anonymous;
+            }
+        }
+
+        private bool IsTokenExpired(string token)
+        {
+            var handler = new JwtSecurityTokenHandler();
+            var jwtToken = handler.ReadJwtToken(token);
+            var expirationTime = jwtToken.ValidTo;
+
+            // Check if token will expire in the next 5 minutes
+            return expirationTime <= DateTime.UtcNow.AddMinutes(5);
+        }
+
+        private async Task<string?> RefreshTokenAsync(string expiredToken)
+        {
+            try
+            {
+                // Create an object to send as JSON
+                var refreshRequest = new { token = expiredToken };
+
+                // Use PostAsJsonAsync to correctly serialize and send the request
+                var response = await _httpClient.PostAsJsonAsync("/api/auth/refresh-token", refreshRequest);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var newToken = await response.Content.ReadAsStringAsync();
+                    return newToken;
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Token refresh error: {ex.Message}");
+                return null;
             }
         }
 

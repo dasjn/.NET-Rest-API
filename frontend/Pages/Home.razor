@@ -2,8 +2,12 @@
 @inject HttpClient Http
 @using IA.FrontEnd.Components
 @using IA.FrontEnd.Models
+@using IA.FrontEnd.Services
+@inject VideoInteractionService InteractionService
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Interventional Academy - Videos</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Videos destacados</MudText>
 
 <MudGrid Justify="Justify.FlexStart" AlignItems="AlignItems.Start" Spacing="4">
     @if (isLoading)
@@ -12,27 +16,64 @@
     }
     else if (videos == null || !videos.Any())
     {
-            <MudText Typo="Typo.h5" Class="text-center">No hay videos disponibles</MudText>
+        <MudItem xs="12">
+            <MudAlert Severity="Severity.Info">No hay videos disponibles.</MudAlert>
+        </MudItem>
     }
     else
     {
         @foreach (var video in videos)
         {
-            <VideoCard VideoUri="@($"https://localhost:7113/{video.Uri.Replace("\\", "/")}")"
+            <VideoCard VideoId="@video.Id"
+                       VideoUri="@video.Uri"
                        Name="@video.Name"
                        Description="@video.Description" />
         }
     }
 </MudGrid>
 
+@if (!isLoading && videos?.Any() == true)
+{
+    <MudDivider Class="my-6" />
+
+    <MudText Typo="Typo.h4" Class="mb-4">Videos más vistos</MudText>
+
+    <MudGrid Justify="Justify.FlexStart" AlignItems="AlignItems.Start" Spacing="4">
+        @foreach (var video in videos.OrderByDescending(v => v.ViewsCount).Take(4))
+        {
+            <VideoCard VideoId="@video.Id"
+                       VideoUri="@video.Uri"
+                       Name="@video.Name"
+                       Description="@video.Description" />
+        }
+    </MudGrid>
+}
+
 @code {
     private bool isLoading = true;
-    private List<Video>? videos;
-    private Dictionary<int, bool> isLoadingImages = new();
+    private List<VideoDto>? videos;
 
     protected override async Task OnInitializedAsync()
     {
-        videos = await Http.GetFromJsonAsync<List<Video>>("https://localhost:7113/api/Videos");
-        isLoading = false;
+        await LoadVideos();
+    }
+
+    private async Task LoadVideos()
+    {
+        try
+        {
+            var allVideos = await InteractionService.GetAllVideos();
+            videos = allVideos;
+        }
+        catch (Exception ex)
+        {
+            // Manejar error
+            videos = new List<VideoDto>();
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
     }
 }
