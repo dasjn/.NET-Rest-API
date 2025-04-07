@@ -1,0 +1,79 @@
+﻿@inherits LayoutComponentBase
+@inject MainLayoutVM _mainLayoutVM
+@inject AuthService _authService
+@inject NavigationManager _navigationManager
+
+@* Proveedores de MudBlazor para toda la aplicación*@
+<MudThemeProvider Theme="@_mainLayoutVM.Theme" IsDarkMode="_mainLayoutVM.IsDarkMode" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar>
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@DrawerToggle" />
+        <MudText Typo="Typo.h5" Class="ml-3">Interventional Academy</MudText>
+        <MudSpacer />
+        
+        <AuthorizeView>
+            <Authorized>
+                <MudMenu Direction="Direction.Left" OffsetY="true" Dense="true">
+                    <ActivatorContent>
+                        <MudChip T="string" Icon="@Icons.Material.Filled.Person" Color="Color.Primary">@context.User.Identity.Name</MudChip>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <MudMenuItem OnClick="LogoutClick">Cerrar sesión</MudMenuItem>
+                    </ChildContent>
+                </MudMenu>
+            </Authorized>
+        </AuthorizeView>
+        
+        <MudIconButton Icon="@(DarkLightModeButtonIcon)" Color="Color.Inherit" OnClick="@DarkModeToggle" />
+        <MudIconButton Icon="@Icons.Material.Filled.MoreVert" Color="Color.Inherit" Edge="Edge.End" />
+    </MudAppBar>
+    <MudDrawer @bind-Open="@_drawerOpen">
+        <NavMenu />
+    </MudDrawer>
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-6">
+            <MudBreakpointProvider>
+                @Body
+            </MudBreakpointProvider>
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+
+    // Botón de modo oscuro/claro
+    private string DarkLightModeButtonIcon => _mainLayoutVM.IsDarkMode
+        ? Icons.Material.Rounded.AutoMode
+        : Icons.Material.Outlined.DarkMode;
+
+    private void DrawerToggle()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+
+    private void DarkModeToggle()
+    {
+        _mainLayoutVM.ToggleDarkMode();
+    }
+    
+    private async Task LogoutClick()
+    {
+        await _authService.Logout();
+        _navigationManager.NavigateTo("/login");
+    }
+    
+    protected override async Task OnInitializedAsync()
+    {
+        // Verificar si el usuario está autenticado al cargar el layout
+        var isAuthenticated = await _authService.IsAuthenticated();
+        if (!isAuthenticated)
+        {
+            _navigationManager.NavigateTo("/login");
+        }
+    }
+}

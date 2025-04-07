@@ -1,0 +1,45 @@
+﻿@using MudBlazor
+@using System
+
+<MudItem xs="12" sm="6" md="4" lg="3">
+    <MudLink Href="@($"/video/{Uri.EscapeDataString(VideoUri)}")">
+        <MudCard Style="height: 350px;">
+            <MudCardContent>
+                <MudStack Spacing="3" Class="row d-flex h-100">
+                    <video controls style="max-width: 100%; height: auto;" class="rounded-2">
+                        <source src="@VideoUri" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+
+                    <!-- Título y descripción con truncamiento de varias líneas -->
+                    <MudStack Spacing="1" Style="flex-grow: 1;">
+                        <MudText Typo="Typo.h6"
+                                 Style="display: -webkit-box;
+                                        -webkit-line-clamp: 2;
+                                        -webkit-box-orient: vertical;
+                                        overflow: hidden;
+                                        text-overflow: ellipsis;"
+                                 Title="@Name">
+                            @Name
+                        </MudText>
+                        <MudText Typo="Typo.body2"
+                                 Style="display: -webkit-box;
+                                        -webkit-line-clamp: 1;
+                                        -webkit-box-orient: vertical;
+                                        overflow: hidden;
+                                        text-overflow: ellipsis;"
+                                 Title="@Description">
+                            @Description
+                        </MudText>
+                    </MudStack>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudLink>
+</MudItem>
+
+@code {
+    [Parameter] public string VideoUri { get; set; } = string.Empty;
+    [Parameter] public string Name { get; set; } = string.Empty;
+    [Parameter] public string Description { get; set; } = string.Empty;
+}

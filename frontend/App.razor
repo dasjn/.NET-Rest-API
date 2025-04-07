@@ -1,0 +1,74 @@
+﻿<CascadingAuthenticationState>
+    <Router AppAssembly="@typeof(App).Assembly">
+        <Found Context="routeData">
+            @if (IsAuthenticationPage(routeData))
+            {
+                <RouteView RouteData="@routeData" DefaultLayout="@typeof(LoginLayout)" />
+            }
+            else
+            {
+                <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+                    <NotAuthorized>
+                        <RedirectToLogin />
+                    </NotAuthorized>
+                </AuthorizeRouteView>
+            }
+            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <PageTitle>No encontrado</PageTitle>
+            <LayoutView Layout="@typeof(LoginLayout)">
+                <MudText Typo="Typo.h5" Class="my-4" Align="Align.Center">Lo sentimos, esta página no existe.</MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Link="/login" Class="mt-4">
+                    Volver al inicio
+                </MudButton>
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>
+
+@code {
+    [Inject] private NavigationManager NavigationManager { get; set; }
+    [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; }
+
+    private bool IsAuthenticationPage(RouteData routeData)
+    {
+        return routeData.PageType.Name.Contains("Login") ||
+               routeData.PageType.Name.Contains("Authentication") ||
+               routeData.RouteValues.Values.Any(v => v?.ToString()?.Contains("login") ?? false) ||
+               routeData.RouteValues.Values.Any(v => v?.ToString()?.Contains("authentication") ?? false);
+    }
+
+    // En lugar de usar OnNavigateAsync, usaremos OnInitialized y OnAfterRender para verificar la ruta
+    protected override async Task OnInitializedAsync()
+    {
+        NavigationManager.LocationChanged += NavigationManager_LocationChanged;
+        await CheckUserAuthentication();
+    }
+
+    private async void NavigationManager_LocationChanged(object sender, LocationChangedEventArgs e)
+    {
+        await CheckUserAuthentication();
+    }
+
+    private async Task CheckUserAuthentication()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var isAuthenticated = authState.User.Identity.IsAuthenticated;
+        var currentPath = NavigationManager.Uri.ToLower();
+
+        bool isAuthPage = currentPath.Contains("/login") ||
+                          currentPath.Contains("/authentication");
+
+        if (!isAuthenticated && !isAuthPage)
+        {
+            NavigationManager.NavigateTo("/login", forceLoad: false);
+        }
+    }
+
+    // Importante: limpiar el evento al desmontar el componente
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= NavigationManager_LocationChanged;
+    }
+}

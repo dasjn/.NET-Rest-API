@@ -1,0 +1,40 @@
+﻿@page "/authentication/login-callback"
+@using Microsoft.AspNetCore.WebUtilities
+@inject AuthService AuthService
+@inject NavigationManager NavigationManager
+
+<h3>Iniciando sesión...</h3>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        var queryParameters = QueryHelpers.ParseQuery(uri.Query);
+
+        if (queryParameters.TryGetValue("token", out var tokenParam))
+        {
+            string token = tokenParam.First();
+            
+            // Extraer información adicional si está disponible
+            string email = queryParameters.TryGetValue("email", out var emailParam) 
+                ? emailParam.First() 
+                : null;
+            
+            string name = queryParameters.TryGetValue("name", out var nameParam) 
+                ? nameParam.First() 
+                : null;
+            
+            string internalId = queryParameters.TryGetValue("internalId", out var internalIdParam) 
+                ? internalIdParam.First() 
+                : null;
+
+            // Llamar al método de manejo de callback con información adicional
+            await AuthService.HandleCallback(token, email, name, internalId);
+            
+            NavigationManager.NavigateTo("/");
+        }
+        else
+        {
+            NavigationManager.NavigateTo("/authentication/login-failed");
+        }
+}}

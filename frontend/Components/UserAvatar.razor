@@ -1,0 +1,51 @@
+﻿@using MudBlazor
+@inject HttpClient Http
+
+
+<MudItem>
+    @if (IsLoading)
+    {
+        <MudSkeleton SkeletonType="SkeletonType.Circle" Width="50px" Height="50px" />
+    }
+
+    @if (!IsLoading && ImageAvailable)
+    {
+        <MudImage ObjectFit="ObjectFit.Contain"
+                  ObjectPosition="ObjectPosition.Center"
+                  Src="@ImageUrl"
+                  Width="50" Height="50" Alt="User Avatar" Elevation="25"
+                  Class="rounded-circle" />
+    }
+    else if (!IsLoading && !ImageAvailable)
+    {
+        <MudImage ObjectFit="ObjectFit.Contain"
+                  ObjectPosition="ObjectPosition.Center"
+                  Src="https://via.placeholder.com/50"
+                  Width="50" Height="50" Alt="Fallback Avatar" Elevation="25"
+                  Class="rounded-circle" />
+    }
+</MudItem>
+
+@code {
+    private bool IsLoading = true;
+    private bool ImageAvailable = false;
+    private string ImageUrl = "https://avatar.iran.liara.run/public/job/doctor/male";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var response = await Http.GetAsync(ImageUrl);
+            ImageAvailable = response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            ImageAvailable = false;
+        }
+        finally
+        {
+            IsLoading = false;
+            StateHasChanged();
+        }
+    }
+}

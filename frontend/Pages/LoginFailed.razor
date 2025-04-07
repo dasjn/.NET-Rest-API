@@ -1,0 +1,40 @@
+﻿@page "/authentication/login-failed"
+@inject NavigationManager NavigationManager
+@using Microsoft.AspNetCore.WebUtilities
+
+<h3>Error de inicio de sesión</h3>
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger">
+        <h4>Detalles del error:</h4>
+        <p>@errorMessage</p>
+    </div>
+}
+else
+{
+    <p>Lo sentimos, ha habido un problema al intentar iniciar sesión. Por favor, inténtalo de nuevo.</p>
+}
+
+<button class="btn btn-primary" @onclick="RetryLogin">Intentar de nuevo</button>
+<a href="/" class="btn btn-secondary ml-2">Volver al inicio</a>
+
+@code {
+    private string errorMessage = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+
+        if (QueryHelpers.ParseQuery(uri.Query).TryGetValue("error", out var errorParam))
+        {
+            errorMessage = errorParam;
+            Console.WriteLine($"Error de autenticación: {errorMessage}");
+        }
+    }
+
+    private void RetryLogin()
+    {
+        NavigationManager.NavigateTo("/api/auth/google-login", forceLoad: true);
+    }
+}

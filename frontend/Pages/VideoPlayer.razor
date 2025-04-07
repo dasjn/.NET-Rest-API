@@ -1,0 +1,80 @@
+﻿@page "/video/{Uri}"
+@inject HttpClient Http
+@using IA.FrontEnd.Components
+@using IA.FrontEnd.Models
+
+@if (!string.IsNullOrEmpty(VideoUri))
+{
+    <MudGrid Spacing="3">
+        <MudItem xs="12" md="9">
+            @if (!string.IsNullOrEmpty(VideoUri))
+            {
+                <MudStack Spacing="3">
+                    <video controls style="width: 100%" class="rounded-2">
+                        <source src="@VideoUri" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                    <MudStack Spacing="3" Class="p-4 ">
+                        <MudText Typo="Typo.h6">Comentarios</MudText>
+                        <CommentCard/>
+                        <CommentCard/>
+                        <CommentCard />
+                    </MudStack>
+                </MudStack>
+            }
+            else
+            {
+                <p>Loading video...</p>
+            }
+        </MudItem>
+
+        <MudItem xs="12" md="3">
+            @if (relatedVideos == null) return;
+            @foreach (var video in relatedVideos)
+            {
+                <VideoCardHorizontal VideoUri="@video.Uri.ToString()"
+                                     Name="@video.Name"
+                                     Description="@video.Description" />
+                <VideoCardHorizontal VideoUri="@video.Uri.ToString()"
+                                     Name="@video.Name"
+                                     Description="@video.Description" />
+                <VideoCardHorizontal VideoUri="@video.Uri.ToString()"
+                                     Name="@video.Name"
+                                     Description="@video.Description" />
+                <VideoCardHorizontal VideoUri="@video.Uri.ToString()"
+                                     Name="@video.Name"
+                                     Description="@video.Description" />
+            }
+        </MudItem>
+    </MudGrid>
+}
+else
+{
+    <p>Loading video...</p>
+}
+
+@code {
+    [Parameter]
+    public string Uri { get; set; }
+
+    private string? VideoUri;
+
+    protected override void OnParametersSet()
+    {
+        // Decodificar la URL si es necesario
+        if (!string.IsNullOrEmpty(Uri))
+        {
+            VideoUri = Uri;
+        }
+    }
+
+    private bool isLoading = true;
+    private List<Video>? relatedVideos;
+    private Dictionary<int, bool> isLoadingImages = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        relatedVideos = await Http.GetFromJsonAsync<List<Video>>("https://localhost:7113/api/Videos");
+        isLoading = false;
+    }
+}

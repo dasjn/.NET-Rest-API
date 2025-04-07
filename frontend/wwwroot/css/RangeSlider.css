@@ -1,0 +1,172 @@
+﻿.range_container {
+    --_marker-border-clr: #7e6fff;
+    --_marker-border-clr-hover: #00d6d6;
+    --_track-heigt: 3px;
+    --_tooltip-bg-clr: rgba(0, 0, 0, 0.4);
+    --_tooltip-txt-clr: var(--_marker-border-clr);
+    width: 100%;
+    max-width: 80%;
+    display: flex;
+    flex-direction: column;
+}
+
+.sliders_control {
+    position: relative;
+}
+
+.slider-tooltip {
+    position: absolute;
+    left: 0;
+    width: fit-content;
+    background-color: var(--_tooltip-bg-clr);
+    color: var(--_tooltip-txt-clr);
+    font-size: 0.8rem;
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    text-align: center;
+    translate: -50% 0;
+}
+
+#fromSliderTooltip {
+    top: -3.5rem;
+}
+
+#toSliderTooltip {
+    bottom: -3.5rem;
+}
+
+/* Triángulo apuntando hacia abajo para el input de 'from' */
+input#fromSlider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    pointer-events: all;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 15px solid var(--_marker-border-clr); /* Triángulo hacia abajo */
+    background-color: transparent;
+    cursor: pointer;
+    margin-top: -15px; /* Ajuste de la posición */
+}
+
+/* Triángulo apuntando hacia arriba para el input de 'to' */
+input#toSlider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    pointer-events: all;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 15px solid var(--_marker-border-clr); /* Triángulo hacia arriba */
+    background-color: transparent;
+    cursor: pointer;
+    margin-bottom: -20px;
+}
+
+/* Triángulo apuntando hacia abajo para el input de 'from' en Firefox */
+input#fromSlider::-moz-range-thumb {
+    -webkit-appearance: none;
+    pointer-events: all;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 15px solid var(--_marker-border-clr); /* Triángulo hacia abajo */
+    background-color: transparent;
+    cursor: pointer;
+}
+
+/* Triángulo apuntando hacia arriba para el input de 'to' en Firefox */
+input#toSlider::-moz-range-thumb {
+    -webkit-appearance: none;
+    pointer-events: all;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 15px solid var(--_marker-border-clr); /* Triángulo hacia arriba */
+    background-color: transparent;
+    cursor: pointer;
+}
+
+input[type=range]::-webkit-slider-thumb:hover {
+    background-color: transparent; /* El triángulo no cambia de color en hover */
+}
+
+/* Cuando el slider de 'from' está activo (clicado o movido) */
+input#fromSlider:active::-webkit-slider-thumb {
+    border-top: 15px solid var(--_marker-border-clr-hover); /* Triángulo hacia abajo con color más claro */
+}
+
+input#fromSlider:active::-moz-range-thumb {
+    border-top: 15px solid var(--_marker-border-clr-hover); /* Triángulo hacia abajo con color más claro */
+}
+
+/* Cuando el slider de 'to' está activo (clicado o movido) */
+input#toSlider:active::-webkit-slider-thumb {
+    border-bottom: 15px solid var(--_marker-border-clr-hover); /* Triángulo hacia arriba con color más claro */
+}
+
+input#toSlider:active::-moz-range-thumb {
+    border-bottom: 15px solid var(--_marker-border-clr-hover); /* Triángulo hacia arriba con color más claro */
+}
+
+/* Cuando el slider de 'from' está activo (clicado o movido) */
+input#fromSlider:hover::-webkit-slider-thumb {
+    border-top: 15px solid var(--_marker-border-clr-hover); /* Triángulo hacia abajo con color más claro */
+}
+
+input#fromSlider:hover::-moz-range-thumb {
+    border-top: 15px solid var(--_marker-border-clr-hover); /* Triángulo hacia abajo con color más claro */
+}
+
+/* Cuando el slider de 'to' está activo (clicado o movido) */
+input#toSlider:hover::-webkit-slider-thumb {
+    border-bottom: 15px solid var(--_marker-border-clr-hover); /* Triángulo hacia arriba con color más claro */
+}
+
+input#toSlider:hover::-moz-range-thumb {
+    border-bottom: 15px solid var(--_marker-border-clr-hover); /* Triángulo hacia arriba con color más claro */
+}
+
+
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: var(--_track-heigt);
+    width: 100%;
+    position: absolute;
+    background-color: var(--_marker-border-clr);
+    pointer-events: none;
+}
+
+#fromSlider {
+    height: 0;
+    z-index: 1;
+}
+
+.scale {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 2rem;
+    position: relative;
+    width: calc(100% - var(--_marker-size));
+    margin-inline: auto;
+    font-size: 0.8rem;
+}
+
+    .scale div {
+        position: absolute;
+        translate: -50% 0;
+    }
+
+        .scale div::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            translate: -50% -125%;
+            width: 1px;
+            height: 10px;
+            background-color: #666;
+        }

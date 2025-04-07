@@ -1,0 +1,68 @@
+﻿@page "/login"
+@layout LoginLayout
+@inject AuthService AuthService
+@inject NavigationManager NavigationManager
+@inject MudBlazor.ISnackbar Snackbar
+
+<MudCard Class="mt-4" Style="width: 100%; max-width: 500px;">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h5" Align="Align.Center">Bienvenido a Interventional Academy</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        <MudText Align="Align.Center" Class="mb-4">Inicia sesión para acceder a la plataforma</MudText>
+
+        @* <div class="d-flex justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200">
+                <!-- Fondo circular con gradiente suave -->
+                <defs>
+                    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#f5f5f5;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#e0e0e0;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+
+                <!-- Símbolo abstracto que representa intervención y conocimiento -->
+                <g transform="translate(200, 70)">
+                    <circle cx="0" cy="0" r="40" fill="url(#grad)" stroke="#2c3e50" stroke-width="2" />
+                    <path d="M-20,0 L20,0 M0,-20 L0,20" stroke="#2c3e50" stroke-width="3" stroke-linecap="round" />
+                    <circle cx="0" cy="0" r="7" fill="#2c3e50" />
+                </g>
+
+                <!-- Texto "Interventional" -->
+                <text x="200" y="135" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="500" text-anchor="middle" fill="#2c3e50">INTERVENTIONAL</text>
+
+                <!-- Texto "Academy" -->
+                <text x="200" y="160" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="500" text-anchor="middle" fill="#2c3e50">ACADEMY</text>
+            </svg>
+        </div> *@
+    </MudCardContent>
+    <MudCardActions Class="d-flex justify-center pb-4">
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Custom.Brands.Google"
+                   Size="Size.Large"
+                   FullWidth="true"
+                   OnClick="LoginWithGoogle">
+            Iniciar sesión con Google
+        </MudButton>
+    </MudCardActions>
+</MudCard>
+
+@code {
+    private async Task LoginWithGoogle()
+    {
+        await AuthService.Login();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Si el usuario ya está autenticado, redirigirlo a la página principal
+        var isAuthenticated = await AuthService.IsAuthenticated();
+        if (isAuthenticated)
+        {
+            NavigationManager.NavigateTo("/");
+        }
+    }
+}

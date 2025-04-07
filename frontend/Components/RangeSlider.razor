@@ -1,0 +1,62 @@
+﻿@inject IJSRuntime Runtime
+
+<div class="range_container">
+    <div class="sliders_control">
+        <!-- Tooltips dinámicos que renderizan en hh:mm:ss -->
+        <div id="fromSliderTooltip" class="slider-tooltip">@FormatTime(FromValue)</div>
+        <input id="fromSlider" type="range" value="@FromValue" min="@Min" max="@Max" step="@Step" @oninput="OnFromInput" />
+        <div id="toSliderTooltip" class="slider-tooltip">@FormatTime(ToValue)</div>
+        <input id="toSlider" type="range" value="@ToValue" min="@Min" max="@Max" step="@Step" @oninput="OnToInput" />
+    </div>
+    <div id="scale" class="scale" data-steps="@Step"></div>
+</div>
+
+@code {
+    [Parameter]
+    public int Min { get; set; } = 0; // Valor mínimo (en segundos)
+
+    [Parameter]
+    public int Max { get; set; } = 36000; // Valor máximo (en segundos)
+
+    [Parameter]
+    public int Step { get; set; } = 1; // Incrementos en segundos
+
+    [Parameter]
+    public int FromValue { get; set; } = 0; // Valor inicial del rango, en segundos
+
+    [Parameter]
+    public int ToValue { get; set; } = 300; // Valor final del rango, en segundos
+
+    [Parameter]
+    public EventCallback<int> FromValueChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<int> ToValueChanged { get; set; }
+
+    private async Task OnFromInput(ChangeEventArgs e)
+    {
+        FromValue = int.Parse(e.Value.ToString());
+        await FromValueChanged.InvokeAsync(FromValue);
+    }
+
+    private async Task OnToInput(ChangeEventArgs e)
+    {
+        ToValue = int.Parse(e.Value.ToString());
+        await ToValueChanged.InvokeAsync(ToValue);
+    }
+
+    // Convierte los segundos en formato hh:mm:ss
+    private string FormatTime(int totalSeconds)
+    {
+        TimeSpan time = TimeSpan.FromSeconds(totalSeconds);
+        return $"{time.Hours:D2}:{time.Minutes:D2}:{time.Seconds:D2}";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Runtime.InvokeVoidAsync("initializeRangeSlider");
+        }
+    }
+}

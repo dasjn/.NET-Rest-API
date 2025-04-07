@@ -1,0 +1,463 @@
+﻿@page "/upload-video"
+@using FFmpegBlazor
+@using IA.FrontEnd.Components
+@using IA.FrontEnd.Models
+@using IA.FrontEnd.Services
+@using System.Text
+@inject IJSRuntime JSRuntime
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject VideoService VideoService
+@implements IDisposable
+
+<PageTitle>Upload Video</PageTitle>
+
+<h1>Upload Video</h1>
+<p>Upload video and cut it if desired.</p>
+
+@if (_isUploading)
+{
+    <MudStack Style="width: 100%">
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-7" />
+    </MudStack>
+}
+else
+{
+    <MudStack Style="width: 100%">
+        <MudFileUpload T="IReadOnlyList<IBrowserFile>"
+                       @ref="_fileUploader"
+                       OnFilesChanged="HandleFileSelection"
+                       Hidden="false"
+                       InputClass="absolute mud-width-full mud-height-full overflow-hidden z-10"
+                       InputStyle="opacity:0"
+                       MaximumFileCount="1"
+                       Accept="@ACCEPTED_VIDEO_EXTENSIONS"
+                       tabindex="-1"
+                       @ondrop="@ResetDragClass"
+                       @ondragenter="@SetDragClass"
+                       @ondragleave="@ResetDragClass"
+                       @ondragend="@ResetDragClass">
+            <ActivatorContent>
+                <MudPaper Outlined="true"
+                          Class="@_dragAreaClass">
+                    <MudText Typo="Typo.h6">
+                        Drag and drop your video here (only @ACCEPTED_VIDEO_EXTENSIONS)
+                    </MudText>
+                    @if (!string.IsNullOrEmpty(_selectedFileName))
+                    {
+                        <MudChip T="string" Color="Color.Dark" Text="@_selectedFileName" />
+                    }
+                </MudPaper>
+            </ActivatorContent>
+        </MudFileUpload>
+        <MudToolBar Gutters="false" Class="relative d-flex justify-end gap-4">
+            <MudButton Color="Color.Primary"
+                       OnClick="OpenFilePicker"
+                       Variant="Variant.Filled">
+                Open file picker
+            </MudButton>
+            <MudButton Color="Color.Primary"
+                       Disabled="@IsUploadButtonDisabled"
+                       OnClick="ProcessAndUploadVideo"
+                       Variant="Variant.Filled">
+                Upload
+            </MudButton>
+            <MudButton Color="Color.Error"
+                       Disabled="@string.IsNullOrEmpty(_selectedFileName)"
+                       OnClick="ClearSelection"
+                       Variant="Variant.Filled">
+                Clear
+            </MudButton>
+        </MudToolBar>
+    </MudStack>
+
+    <MudStack Class="@GetVideoVisibilityClass()" Style="@GetVideoResponsiveStyles()">
+        <video id="videoPlayer" style="width: 100%; margin-bottom: 30px;" controls src="@_videoSourceUrl" />
+        <RangeSlider Min="@_startTimeMin" Max="@_videoDurationInSeconds" Step="1"
+                     FromValue="@_startTimeCut" ToValue="@_endTimeCut"
+                     FromValueChanged="HandleStartTimeChange" ToValueChanged="HandleEndTimeChange" />
+        <MudStack Class="w-100 gap-2">
+            <MudTextField T="string" Label="Title" Variant="Variant.Outlined" @bind-Value=@_videoTitle Class="w-100" />
+            <MudTextField T="string" Label="Description" Variant="Variant.Outlined" @bind-Value=@_videoDescription Lines="3" Class="w-100" />
+        </MudStack>
+    </MudStack>
+}
+
+<br />
+<Logger LogMessages="@_logMessages" Progress="@_progressMessage" Rows="10" />
+
+<script>
+    function getVideoDuration(videoElementId, dotnetHelper) {
+        const video = document.getElementById(videoElementId);
+        video.onloadedmetadata = () => {
+            dotnetHelper.invokeMethodAsync("SetVideoDuration", video.duration)
+                .catch(error => console.error("Error invoking SetVideoDuration:", error));
+        };
+    }
+
+    function setVideoStartAndEnd(videoElementId, startTime, endTime) {
+        const video = document.getElementById(videoElementId);
+        video.currentTime = startTime;
+
+        video.ontimeupdate = () => {
+            if (video.currentTime >= endTime) {
+                video.pause();
+                video.currentTime = startTime;
+            }
+        };
+    }
+</script>
+
+@code {
+    #region Constants
+    private const string DEFAULT_DRAG_CLASS = "relative rounded-lg border-2 border-full pa-4 mt-4 mud-width-full mud-height-full";
+    private const int DEFAULT_DURATION = 500;
+    private const int MAX_FILE_SIZE_BYTES = 1073741824; // 1GB
+    private const string ACCEPTED_VIDEO_EXTENSIONS = ".mp4, .avi, .mkv, .mov, .flv, .wmv";
+    private const string API_BASE_URL = "https://localhost:7113";
+    private const string VIDEOS_API_ENDPOINT = "/api/Videos";
+    #endregion
+
+    #region Private Fields
+    private string _dragAreaClass = DEFAULT_DRAG_CLASS;
+    private MudFileUpload<IReadOnlyList<IBrowserFile>>? _fileUploader;
+    private string? _selectedFileName;
+    private IBrowserFile? _selectedFile;
+
+    private FFMPEG? _ffmpegInstance;
+    private byte[]? _videoData;
+    private byte[]? _processedVideoData;
+    private string _videoSourceUrl = string.Empty;
+    private string _processedVideoUrl = string.Empty;
+    private string _logMessages = string.Empty;
+    private string _progressMessage = string.Empty;
+    private double? _progressValue;
+    private string _inputFileName = string.Empty;
+    private string _outputFileName = string.Empty;
+    private string _fileContentType = string.Empty;
+    private string _videoTitle = string.Empty;
+    private string _videoDescription = string.Empty;
+    private bool _videoWasProcessed = false;
+    private bool _isUploading = false;
+
+    private int _startTimeMin = 0;
+    private int _startTimeCut = 0;
+    private int _endTimeCut = DEFAULT_DURATION;
+    private int _videoDurationInSeconds = DEFAULT_DURATION;
+    #endregion
+
+    #region Properties
+    [CascadingParameter]
+    private Breakpoint CurrentBreakpoint { get; set; }
+
+    private bool IsUploadButtonDisabled =>
+        string.IsNullOrEmpty(_selectedFileName) ||
+        string.IsNullOrEmpty(_videoTitle) ||
+        string.IsNullOrEmpty(_videoDescription);
+
+    private List<string> AllowedMimeTypes => new() {
+        "video/mp4",
+        "video/x-msvideo",
+        "video/quicktime",
+        "video/x-matroska"
+    };
+    #endregion
+
+    #region Lifecycle Methods
+    protected override async Task OnInitializedAsync()
+    {
+        if (FFmpegFactory.Runtime == null)
+        {
+            FFmpegFactory.Logger += LogFFmpegMessage;
+            FFmpegFactory.Progress += UpdateProgress;
+        }
+
+        await FFmpegFactory.Init(JSRuntime);
+    }
+
+    public void Dispose()
+    {
+        FFmpegFactory.Logger -= LogFFmpegMessage;
+        FFmpegFactory.Progress -= UpdateProgress;
+
+        // Clean up URLs to prevent memory leaks
+        if (!string.IsNullOrEmpty(_videoSourceUrl))
+        {
+            JSRuntime.InvokeVoidAsync("URL.revokeObjectURL", _videoSourceUrl);
+        }
+
+        if (!string.IsNullOrEmpty(_processedVideoUrl))
+        {
+            JSRuntime.InvokeVoidAsync("URL.revokeObjectURL", _processedVideoUrl);
+        }
+    }
+    #endregion
+
+    #region UI Helper Methods
+    private string GetVideoResponsiveStyles()
+    {
+        string width = CurrentBreakpoint == Breakpoint.Xs ? "width: 100%;" : "width: 80%;";
+        return $"{width} justify-self:center; align-items:center;";
+    }
+
+    private string GetVideoVisibilityClass() =>
+        $"mt-2 gap-5 {(string.IsNullOrEmpty(_videoSourceUrl) ? "visually-hidden" : "")}";
+
+    private void SetDragClass() =>
+        _dragAreaClass = $"{DEFAULT_DRAG_CLASS} mud-border-primary";
+
+    private void ResetDragClass() =>
+        _dragAreaClass = DEFAULT_DRAG_CLASS;
+
+    private string FormatTime(int totalSeconds)
+    {
+        TimeSpan time = TimeSpan.FromSeconds(totalSeconds);
+        return $"{time.Hours:D2}:{time.Minutes:D2}:{time.Seconds:D2}";
+    }
+    #endregion
+
+    #region File Handling Methods
+    private Task OpenFilePicker() =>
+        _fileUploader?.OpenFilePickerAsync() ?? Task.CompletedTask;
+
+    private async Task ClearSelection()
+    {
+        await (_fileUploader?.ClearAsync() ?? Task.CompletedTask);
+
+        _selectedFileName = string.Empty;
+        _videoSourceUrl = string.Empty;
+        _videoTitle = string.Empty;
+        _videoDescription = string.Empty;
+        _startTimeMin = 0;
+        _startTimeCut = 0;
+        _endTimeCut = DEFAULT_DURATION;
+        _videoDurationInSeconds = DEFAULT_DURATION;
+        _videoWasProcessed = false;
+        _processedVideoData = null;
+
+        await JSRuntime.InvokeVoidAsync("eval", "document.querySelector('input[type=file]').value = ''");
+        ResetDragClass();
+        StateHasChanged();
+    }
+
+    private async void HandleFileSelection(InputFileChangeEventArgs e)
+    {
+        ResetDragClass();
+
+        try
+        {
+            var file = e.File;
+
+            if (!AllowedMimeTypes.Contains(file.ContentType))
+            {
+                Snackbar.Add("❌ Invalid file type. Please upload a video file.", Severity.Error);
+                return;
+            }
+
+            _selectedFile = file;
+            _selectedFileName = file.Name;
+
+            _logMessages = string.Empty;
+            _progressMessage = string.Empty;
+
+            _inputFileName = file.Name;
+            _outputFileName = $"cut_{_inputFileName}";
+            _fileContentType = file.ContentType;
+            _videoWasProcessed = false;
+            _processedVideoData = null;
+
+            using var stream = file.OpenReadStream(MAX_FILE_SIZE_BYTES);
+            _videoData = new byte[file.Size];
+            await stream.ReadAsync(_videoData);
+
+            _videoSourceUrl = FFmpegFactory.CreateURLFromBuffer(_videoData, _inputFileName, _fileContentType);
+            await JSRuntime.InvokeVoidAsync("getVideoDuration", "videoPlayer", DotNetObjectReference.Create(this));
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            AppendToLog($"❌ Error processing file: {ex.Message}");
+            Snackbar.Add($"❌ Error processing file: {ex.Message}", Severity.Error);
+        }
+    }
+    #endregion
+
+    #region Video Processing Methods
+    [JSInvokable]
+    public async Task SetVideoDuration(double duration)
+    {
+        _videoDurationInSeconds = (int)duration;
+        _startTimeCut = 0;
+        _endTimeCut = _videoDurationInSeconds;
+        StateHasChanged();
+
+        await JSRuntime.InvokeVoidAsync("updateSliderTooltips", _startTimeCut, _endTimeCut);
+    }
+
+    private void HandleStartTimeChange(int value)
+    {
+        _startTimeCut = value;
+        JSRuntime.InvokeVoidAsync("setVideoStartAndEnd", "videoPlayer", _startTimeCut, _endTimeCut);
+    }
+
+    private void HandleEndTimeChange(int value)
+    {
+        _endTimeCut = value;
+        JSRuntime.InvokeVoidAsync("setVideoStartAndEnd", "videoPlayer", _startTimeCut, _endTimeCut);
+    }
+
+    private async Task ProcessAndUploadVideo()
+    {
+        try
+        {
+            bool needsTrimming = _startTimeCut != _startTimeMin || _endTimeCut != _videoDurationInSeconds;
+            _isUploading = true;
+
+            if (needsTrimming)
+            {
+                await ProcessVideo();
+                // Upload is handled in UpdateProgress when processing is complete
+            }
+            else
+            {
+                // If no trimming needed, upload directly
+                await UploadVideo();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendToLog($"❌ Error in processing/uploading: {ex.Message}");
+            Snackbar.Add($"❌ Error occurred: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isUploading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ProcessVideo()
+    {
+        try
+        {
+            _ffmpegInstance = FFmpegFactory.CreateFFmpeg(new FFmpegConfig() { Log = true });
+            await _ffmpegInstance.Load();
+
+            if (!_ffmpegInstance.IsLoaded)
+            {
+                AppendToLog("❌ FFmpeg failed to load.");
+                return;
+            }
+
+            _ffmpegInstance.WriteFile(_inputFileName, _videoData);
+
+            var startTimeFormatted = TimeSpan.FromSeconds(_startTimeCut).ToString(@"hh\:mm\:ss");
+            var durationFormatted = TimeSpan.FromSeconds(_endTimeCut - _startTimeCut).ToString(@"hh\:mm\:ss");
+
+            AppendToLog($"Trimming video from {startTimeFormatted} for {durationFormatted}...");
+            await _ffmpegInstance.Run("-i", _inputFileName, "-ss", startTimeFormatted, "-t", durationFormatted, _outputFileName);
+
+            _ffmpegInstance.UnlinkFile(_inputFileName);
+        }
+        catch (Exception ex)
+        {
+            AppendToLog($"❌ Error in video processing: {ex.Message}");
+            throw;
+        }
+    }
+
+    private async void UpdateProgress(Progress message)
+    {
+        try
+        {
+            var progressRatio = message.Ratio <= 0 ? 0 : message.Ratio >= 100 ? 1 : message.Ratio;
+            _progressValue = progressRatio;
+            _progressMessage = $"Progress: {progressRatio?.ToString("P2")}";
+
+            AppendToLog(_progressMessage);
+
+            if (message.Ratio == 1)
+            {
+                _progressMessage = $"Progress: 100%";
+
+                // Read the processed file
+                var result = await _ffmpegInstance!.ReadFile(_outputFileName);
+                _processedVideoData = result;
+                _processedVideoUrl = FFmpegFactory.CreateURLFromBuffer(result, _outputFileName, _fileContentType);
+                _videoWasProcessed = true;
+
+                AppendToLog($"✅ Video trimmed successfully: {result.Length} bytes");
+
+                // Change view to processed video
+                _videoSourceUrl = _processedVideoUrl;
+
+                // Upload automatically after processing
+                await UploadVideo();
+
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendToLog($"❌ Error during processing: {ex.Message}");
+            _isUploading = false;
+            StateHasChanged();
+        }
+    }
+    #endregion
+
+    #region Upload Methods
+    private async Task UploadVideo()
+    {
+        try
+        {
+            // Select which video to upload based on whether it was processed
+            byte[]? dataToUpload = _videoWasProcessed ? _processedVideoData : _videoData;
+            string? fileNameToUpload = _videoWasProcessed ? _outputFileName : _inputFileName;
+
+            // Usar el nuevo servicio de video
+            var (success, videoEntity, errorMessage) = await VideoService.UploadVideoAsync(
+                dataToUpload,
+                fileNameToUpload,
+                _videoTitle,
+                _videoDescription,
+                _fileContentType
+            );
+
+            if (success && videoEntity != null)
+            {
+                Snackbar.Add($"✅ Video {(_videoWasProcessed ? "trimmed and " : "")}uploaded successfully.", Severity.Success);
+
+                // Formatear la URL del video
+                string videoUri = VideoService.FormatVideoUrl(videoEntity.Uri);
+
+                // Navegar a la página del video
+                Navigation.NavigateTo($"/video/{Uri.EscapeDataString(videoUri)}");
+            }
+            else
+            {
+                Snackbar.Add($"❌ {errorMessage}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"❌ Upload failed: {ex.Message}", Severity.Error);
+        }
+    }
+    #endregion
+
+    #region Logging Methods
+    private void LogFFmpegMessage(Logs message)
+    {
+        var logMessage = $"{message.Type} {message.Message}";
+        AppendToLog(logMessage);
+    }
+
+    private void AppendToLog(string message)
+    {
+        _logMessages += $"{message}\r\n";
+        StateHasChanged();
+    }
+    #endregion
+}

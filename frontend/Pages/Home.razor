@@ -1,0 +1,38 @@
+﻿@page "/"
+@inject HttpClient Http
+@using IA.FrontEnd.Components
+@using IA.FrontEnd.Models
+
+<PageTitle>Home</PageTitle>
+
+<MudGrid Justify="Justify.FlexStart" AlignItems="AlignItems.Start" Spacing="4">
+    @if (isLoading)
+    {
+        <VideoCardSkeletonWrapper />
+    }
+    else if (videos == null || !videos.Any())
+    {
+            <MudText Typo="Typo.h5" Class="text-center">No hay videos disponibles</MudText>
+    }
+    else
+    {
+        @foreach (var video in videos)
+        {
+            <VideoCard VideoUri="@($"https://localhost:7113/{video.Uri.Replace("\\", "/")}")"
+                       Name="@video.Name"
+                       Description="@video.Description" />
+        }
+    }
+</MudGrid>
+
+@code {
+    private bool isLoading = true;
+    private List<Video>? videos;
+    private Dictionary<int, bool> isLoadingImages = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        videos = await Http.GetFromJsonAsync<List<Video>>("https://localhost:7113/api/Videos");
+        isLoading = false;
+    }
+}
