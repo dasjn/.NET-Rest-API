@@ -34,32 +34,44 @@ namespace IA.FrontEnd.Services
             await _jsRuntime.InvokeVoidAsync("open", $"{_apiBaseUrl}/api/auth/google-login", "_self");
         }
 
-        public async Task HandleCallback(string token, string? email = null, string? name = null, string? internalId = null)
+        public async Task HandleCallback(string token, string? email = null, string? name = null, string? internalId = null, string? profilePictureUrl = null)
         {
             await _authStateProvider.SetTokenAsync(token);
 
-            // Si tienes un método para guardar información adicional del usuario
+            // Guardar información adicional del usuario
             if (!string.IsNullOrEmpty(email) && !string.IsNullOrEmpty(name))
             {
-                await SaveUserInfoLocally(email, name, internalId);
+                await SaveUserInfoLocally(email, name, internalId, profilePictureUrl);
             }
         }
 
-        private async Task SaveUserInfoLocally(string email, string name, string? internalId)
+        private async Task SaveUserInfoLocally(string email, string name, string? internalId, string? profilePictureUrl)
         {
             // Implementa la lógica para guardar información adicional
             // Puedes usar localStorage o algún servicio de estado
             await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "userEmail", email);
             await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "userName", name);
+
             if (!string.IsNullOrEmpty(internalId))
             {
                 await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "userInternalId", internalId);
+            }
+
+            if (!string.IsNullOrEmpty(profilePictureUrl))
+            {
+                await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "userProfilePictureUrl", profilePictureUrl);
             }
         }
 
         public async Task Logout()
         {
             await _authStateProvider.LogoutAsync();
+
+            // Limpiar también los datos locales
+            await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", "userEmail");
+            await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", "userName");
+            await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", "userInternalId");
+            await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", "userProfilePictureUrl");
         }
 
         public async Task<UserInfo?> GetUserInfo()
@@ -85,5 +97,6 @@ namespace IA.FrontEnd.Services
         public string? UserId { get; set; }
         public string? Email { get; set; }
         public string? Name { get; set; }
+        public string? ProfilePictureUrl { get; set; }
     }
 }

@@ -162,7 +162,7 @@ namespace IA.WebAPI.Controllers
                 _logger.LogInformation("Usuario {Email} autenticado exitosamente", userInfo.Email);
 
                 // Redireccionar al frontend con el token
-                return RedirectToLoginCallback(jwtToken);
+                return RedirectToLoginCallback(jwtToken, userInfo.Picture);
             }
             catch (Exception ex)
             {
@@ -181,13 +181,26 @@ namespace IA.WebAPI.Controllers
         [HttpGet("user-info")]
         [ProducesResponseType(typeof(UserInfoModel), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public ActionResult<UserInfoModel> GetUserInfo()
+        public async Task<ActionResult<UserInfoModel>> GetUserInfo()
         {
+            var userId = User.FindFirst("InternalId")?.Value;
+
+            if (!string.IsNullOrEmpty(userId) && long.TryParse(userId, out var userIdLong))
+            {
+                var userInfo = await _authService.GetUserByIdAsync(userIdLong);
+                if (userInfo != null)
+                {
+                    return Ok(userInfo);
+                }
+            }
+
+            // Fallback a información básica de claims si no se encuentra en la BD
             return Ok(new UserInfoModel
             {
                 UserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value,
                 Email = User.FindFirst(ClaimTypes.Email)?.Value,
-                Name = User.FindFirst(ClaimTypes.Name)?.Value
+                Name = User.FindFirst(ClaimTypes.Name)?.Value,
+                ProfilePictureUrl = User.FindFirst("ProfilePictureUrl")?.Value
             });
         }
 
@@ -231,7 +244,7 @@ namespace IA.WebAPI.Controllers
         /// <summary>
         /// Redirecciona al frontend con un token JWT
         /// </summary>
-        private IActionResult RedirectToLoginCallback(string token)
+        private IActionResult RedirectToLoginCallback(string token, string? profilePictureUrl = null)
         {
             // Decodificar el token para obtener información adicional si es necesario
             var handler = new JwtSecurityTokenHandler();
@@ -250,6 +263,12 @@ namespace IA.WebAPI.Controllers
             query["email"] = Uri.EscapeDataString(email ?? "");
             query["name"] = Uri.EscapeDataString(name ?? "");
             query["internalId"] = Uri.EscapeDataString(internalId ?? "");
+
+            // Añadir URL de imagen de perfil si está disponible
+            if (!string.IsNullOrEmpty(profilePictureUrl))
+            {
+                query["profilePictureUrl"] = Uri.EscapeDataString(profilePictureUrl);
+            }
 
             callbackUrl.Query = query.ToString();
 

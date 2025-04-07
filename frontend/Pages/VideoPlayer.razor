@@ -30,9 +30,7 @@
                 <MudText Typo="Typo.h4">@videoDetails.Name</MudText>
 
                 <MudStack Row="true" AlignItems="AlignItems.Center">
-                    <MudAvatar Style="margin-right: 8px;">
-                        <MudIcon Icon="@Icons.Material.Filled.Person" />
-                    </MudAvatar>
+                    <UserAvatar CustomImageUrl="@GetUploaderProfilePicture()" Size="40" />
                     <MudText Typo="Typo.body1" Style="font-weight: 500;">
                         @(videoDetails.UploadedByUserName ?? "Usuario")
                     </MudText>
@@ -148,6 +146,8 @@
     private long? replyToCommentId;
     private string? replyToUserName;
 
+    private string? uploaderProfilePicture;
+
     protected override async Task OnInitializedAsync()
     {
         await LoadVideoDetails();
@@ -239,6 +239,16 @@
             return uri;
 
         return $"https://localhost:7113/{uri.Replace("\\", "/")}";
+    }
+
+    private string? GetUploaderProfilePicture()
+    {
+        // Si tenemos una imagen de perfil personalizada para el creador, la usamos
+        if (!string.IsNullOrEmpty(uploaderProfilePicture))
+            return uploaderProfilePicture;
+
+        // De lo contrario, devolvemos null y UserAvatar usará la imagen por defecto
+        return null;
     }
 
     #region Comment Handlers

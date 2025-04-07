@@ -1,11 +1,11 @@
 ﻿@using MudBlazor
 @using IA.FrontEnd.Models
+@using IA.FrontEnd.Components
 @using System
 
 <MudPaper Class="pa-3 mb-2" Elevation="0">
     <MudStack Spacing="3" Row="true" Class="h-100">
-        <MudAvatar Image="@(string.IsNullOrEmpty(Comment.UserProfilePictureUrl) ? "https://avatar.iran.liara.run/public/job/doctor/male" : Comment.UserProfilePictureUrl)"
-                   Style="width: 40px; height: 40px;" />
+        <UserAvatar CustomImageUrl="@Comment.UserProfilePictureUrl" Size="40" />
 
         <MudStack Spacing="1" Style="flex-grow: 1;">
             <MudStack Row="true" AlignItems="AlignItems.Center">

@@ -15,6 +15,7 @@ namespace IA.WebAPI.Models.DTOs
         public string Uri { get; set; } = string.Empty;
         public long? UploadedByUserId { get; set; }
         public string? UploadedByUserName { get; set; }
+        public string? UploadedByUserProfilePictureUrl { get; set; }
 
         // Contadores de interacciones
         public int LikesCount { get; set; }

@@ -84,6 +84,16 @@ namespace IA.WebAPI.Extensions
                 client.Timeout = TimeSpan.FromSeconds(30);
             });
 
+            services.AddHttpClient("ImageProxy").ConfigurePrimaryHttpMessageHandler(() =>
+            {
+                return new HttpClientHandler
+                {
+                    AllowAutoRedirect = true,
+                    MaxAutomaticRedirections = 5,
+                    UseCookies = false
+                };
+            });
+
             return services;
         }
 

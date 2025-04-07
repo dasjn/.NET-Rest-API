@@ -1,4 +1,5 @@
 ﻿@inherits LayoutComponentBase
+@using IA.FrontEnd.Components
 @inject MainLayoutVM _mainLayoutVM
 @inject AuthService _authService
 @inject NavigationManager _navigationManager
@@ -14,12 +15,15 @@
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@DrawerToggle" />
         <MudText Typo="Typo.h5" Class="ml-3">Interventional Academy</MudText>
         <MudSpacer />
-        
+
         <AuthorizeView>
             <Authorized>
                 <MudMenu Direction="Direction.Left" OffsetY="true" Dense="true">
                     <ActivatorContent>
-                        <MudChip T="string" Icon="@Icons.Material.Filled.Person" Color="Color.Primary">@context.User.Identity.Name</MudChip>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="ml-2 mr-2">
+                            <UserAvatar />
+                            <MudText>@context.User.Identity.Name</MudText>
+                        </MudStack>
                     </ActivatorContent>
                     <ChildContent>
                         <MudMenuItem OnClick="LogoutClick">Cerrar sesión</MudMenuItem>
@@ -27,7 +31,7 @@
                 </MudMenu>
             </Authorized>
         </AuthorizeView>
-        
+
         <MudIconButton Icon="@(DarkLightModeButtonIcon)" Color="Color.Inherit" OnClick="@DarkModeToggle" />
         <MudIconButton Icon="@Icons.Material.Filled.MoreVert" Color="Color.Inherit" Edge="Edge.End" />
     </MudAppBar>
@@ -60,13 +64,13 @@
     {
         _mainLayoutVM.ToggleDarkMode();
     }
-    
+
     private async Task LogoutClick()
     {
         await _authService.Logout();
         _navigationManager.NavigateTo("/login");
     }
-    
+
     protected override async Task OnInitializedAsync()
     {
         // Verificar si el usuario está autenticado al cargar el layout

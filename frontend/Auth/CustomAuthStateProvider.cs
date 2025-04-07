@@ -143,6 +143,22 @@ namespace IA.FrontEnd.Auth
                     claims.Add(new Claim(ClaimTypes.NameIdentifier, internalIdClaim.Value));
                 }
 
+                // Añadir la imagen de perfil como claim para fácil acceso
+                var profilePictureClaim = claims.FirstOrDefault(c => c.Type == "ProfilePictureUrl");
+                if (profilePictureClaim != null)
+                {
+                    // El claim ya existe, así que no es necesario añadirlo de nuevo
+                }
+                else
+                {
+                    // Intentar obtener la imagen del localStorage como fallback
+                    var profilePictureUrl = _jsRuntime.InvokeAsync<string>("localStorage.getItem", "userProfilePictureUrl").Result;
+                    if (!string.IsNullOrEmpty(profilePictureUrl))
+                    {
+                        claims.Add(new Claim("ProfilePictureUrl", profilePictureUrl));
+                    }
+                }
+
                 var identity = new ClaimsIdentity(claims, "jwt");
                 var user = new ClaimsPrincipal(identity);
 

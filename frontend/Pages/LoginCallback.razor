@@ -11,30 +11,57 @@
         var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
         var queryParameters = QueryHelpers.ParseQuery(uri.Query);
 
-        if (queryParameters.TryGetValue("token", out var tokenParam))
+        if (queryParameters.TryGetValue("token", out var tokenParam) && tokenParam.Count > 0)
         {
-            string token = tokenParam.First();
-            
+            // Extraer el token, asegurándonos de que no sea null
+            string token = tokenParam.First() ?? string.Empty;
+            if (string.IsNullOrEmpty(token))
+            {
+                NavigationManager.NavigateTo("/authentication/login-failed?error=token_empty");
+                return;
+            }
+
             // Extraer información adicional si está disponible
-            string email = queryParameters.TryGetValue("email", out var emailParam) 
-                ? emailParam.First() 
-                : null;
-            
-            string name = queryParameters.TryGetValue("name", out var nameParam) 
-                ? nameParam.First() 
-                : null;
-            
-            string internalId = queryParameters.TryGetValue("internalId", out var internalIdParam) 
-                ? internalIdParam.First() 
-                : null;
+            string email = string.Empty;
+            if (queryParameters.TryGetValue("email", out var emailParam) && emailParam.Count > 0)
+            {
+                email = emailParam.First() ?? string.Empty;
+            }
+
+            string name = string.Empty;
+            if (queryParameters.TryGetValue("name", out var nameParam) && nameParam.Count > 0)
+            {
+                name = nameParam.First() ?? string.Empty;
+            }
+
+            string internalId = string.Empty;
+            if (queryParameters.TryGetValue("internalId", out var internalIdParam) && internalIdParam.Count > 0)
+            {
+                internalId = internalIdParam.First() ?? string.Empty;
+            }
+
+            string profilePictureUrl = string.Empty;
+            if (queryParameters.TryGetValue("profilePictureUrl", out var profilePictureParam) && profilePictureParam.Count > 0)
+            {
+                profilePictureUrl = profilePictureParam.First() ?? string.Empty;
+            }
 
             // Llamar al método de manejo de callback con información adicional
-            await AuthService.HandleCallback(token, email, name, internalId);
-            
-            NavigationManager.NavigateTo("/");
+            try
+            {
+                await AuthService.HandleCallback(token, email, name, internalId, profilePictureUrl);
+                NavigationManager.NavigateTo("/");
+            }
+            catch (Exception ex)
+            {
+                // Registrar el error y redirigir a la página de error
+                Console.WriteLine($"Error en login callback: {ex.Message}");
+                NavigationManager.NavigateTo("/authentication/login-failed?error=callback_error");
+            }
         }
         else
         {
             NavigationManager.NavigateTo("/authentication/login-failed");
         }
-}}
+    }
+}

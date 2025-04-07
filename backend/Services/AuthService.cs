@@ -127,7 +127,7 @@ namespace IA.WebAPI.Services
                     UserId = externalUserId,
                     Email = email,
                     Name = name,
-                    ProfilePictureUrl = profilePictureUrl,
+                    ProfilePictureUrl = profilePictureUrl ?? existingUser.ProfilePictureUrl,
                     InternalId = existingUser.Id.ToString()
                 };
 
@@ -151,9 +151,14 @@ namespace IA.WebAPI.Services
                 new Claim(ClaimTypes.NameIdentifier, user.UserId ?? string.Empty),
                 new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
                 new Claim(ClaimTypes.Name, user.Name ?? string.Empty),
-                new Claim("InternalId", user.InternalId ?? string.Empty),
-                new Claim("ProfilePictureUrl", user.ProfilePictureUrl ?? string.Empty)
+                new Claim("InternalId", user.InternalId ?? string.Empty)
             };
+
+            // Agregar claim para la imagen de perfil si existe
+            if (!string.IsNullOrEmpty(user.ProfilePictureUrl))
+            {
+                claims.Add(new Claim("ProfilePictureUrl", user.ProfilePictureUrl));
+            }
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.Key));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -202,12 +207,17 @@ namespace IA.WebAPI.Services
                 var internalIdClaim = jwtToken.Claims.FirstOrDefault(x => x.Type == "InternalId");
                 var internalId = internalIdClaim?.Value;
 
+                // Obtener la URL de la imagen de perfil si existe
+                var profilePictureClaim = jwtToken.Claims.FirstOrDefault(x => x.Type == "ProfilePictureUrl");
+                var profilePictureUrl = profilePictureClaim?.Value;
+
                 return new UserInfoModel
                 {
                     UserId = userId,
                     Email = email,
                     Name = name,
-                    InternalId = internalId
+                    InternalId = internalId,
+                    ProfilePictureUrl = profilePictureUrl
                 };
             }
             catch (Exception ex)

@@ -67,9 +67,9 @@
             var allVideos = await InteractionService.GetAllVideos();
             videos = allVideos;
         }
-        catch (Exception ex)
+        catch
         {
-            // Manejar error
+            // Manejar error silenciosamente
             videos = new List<VideoDto>();
         }
         finally

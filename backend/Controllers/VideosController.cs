@@ -38,7 +38,7 @@ namespace IA.WebAPI.Controllers
         {
             long? userId = User.Identity?.IsAuthenticated == true ? GetCurrentUserId() : null;
 
-            // Obtener los videos con contadores de interacciones
+            // Obtener los videos con contadores de interacciones e información de usuario
             var videosQuery = _context.Videos
                 .Select(v => new VideoDto
                 {
@@ -49,6 +49,7 @@ namespace IA.WebAPI.Controllers
                     Uri = v.Uri,
                     UploadedByUserId = v.UploadedByUserId,
                     UploadedByUserName = v.UploadedByUser != null ? v.UploadedByUser.Name : null,
+                    UploadedByUserProfilePictureUrl = v.UploadedByUser != null ? v.UploadedByUser.ProfilePictureUrl : null,
                     LikesCount = v.Interactions.Count(i => i.Type == InteractionType.Like),
                     FavoritesCount = v.Interactions.Count(i => i.Type == InteractionType.Favorite),
                     ViewsCount = v.Interactions.Count(i => i.Type == InteractionType.View),
@@ -106,6 +107,7 @@ namespace IA.WebAPI.Controllers
                     Uri = v.Uri,
                     UploadedByUserId = v.UploadedByUserId,
                     UploadedByUserName = v.UploadedByUser != null ? v.UploadedByUser.Name : null,
+                    UploadedByUserProfilePictureUrl = v.UploadedByUser != null ? v.UploadedByUser.ProfilePictureUrl : null,
                     LikesCount = v.Interactions.Count(i => i.Type == InteractionType.Like),
                     FavoritesCount = v.Interactions.Count(i => i.Type == InteractionType.Favorite),
                     ViewsCount = v.Interactions.Count(i => i.Type == InteractionType.View),

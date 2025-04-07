@@ -1,6 +1,8 @@
 ﻿@using MudBlazor
+@using Microsoft.AspNetCore.Components.Authorization
 @inject HttpClient Http
-
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IConfiguration Configuration
 
 <MudItem>
     @if (IsLoading)
@@ -10,7 +12,7 @@
 
     @if (!IsLoading && ImageAvailable)
     {
-        <MudImage ObjectFit="ObjectFit.Contain"
+        <MudImage ObjectFit="ObjectFit.Cover"
                   ObjectPosition="ObjectPosition.Center"
                   Src="@ImageUrl"
                   Width="50" Height="50" Alt="User Avatar" Elevation="25"
@@ -20,26 +22,51 @@
     {
         <MudImage ObjectFit="ObjectFit.Contain"
                   ObjectPosition="ObjectPosition.Center"
-                  Src="https://via.placeholder.com/50"
+                  Src="https://avatar.iran.liara.run/public/job/doctor/male"
                   Width="50" Height="50" Alt="Fallback Avatar" Elevation="25"
                   Class="rounded-circle" />
     }
 </MudItem>
 
 @code {
+    [Parameter] public string? CustomImageUrl { get; set; }
+    [Parameter] public int Size { get; set; } = 50;
+
     private bool IsLoading = true;
     private bool ImageAvailable = false;
-    private string ImageUrl = "https://avatar.iran.liara.run/public/job/doctor/male";
+    private string ImageUrl = string.Empty;
+    private string ApiBaseUrl => Configuration["ApiBaseUrl"] ?? "https://localhost:7113";
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            var response = await Http.GetAsync(ImageUrl);
-            ImageAvailable = response.IsSuccessStatusCode;
+            // Intentar obtener la imagen desde el parámetro si existe
+            if (!string.IsNullOrEmpty(CustomImageUrl))
+            {
+                ImageUrl = ProxyImageUrl(CustomImageUrl);
+                ImageAvailable = true;
+            }
+            else
+            {
+                // Si no hay imagen personalizada, intentar obtener desde los claims del usuario
+                var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+                var user = authState.User;
+
+                if (user.Identity?.IsAuthenticated == true)
+                {
+                    var profilePictureClaim = user.FindFirst("ProfilePictureUrl");
+                    if (profilePictureClaim != null && !string.IsNullOrEmpty(profilePictureClaim.Value))
+                    {
+                        ImageUrl = ProxyImageUrl(profilePictureClaim.Value);
+                        ImageAvailable = true;
+                    }
+                }
+            }
         }
-        catch
+        catch (Exception ex)
         {
+            Console.WriteLine($"Error loading avatar image: {ex.Message}");
             ImageAvailable = false;
         }
         finally
@@ -47,5 +74,24 @@
             IsLoading = false;
             StateHasChanged();
         }
+    }
+
+    private string ProxyImageUrl(string originalUrl)
+    {
+        if (string.IsNullOrEmpty(originalUrl))
+            return string.Empty;
+
+        // Si ya tiene nuestro proxy, devolverla tal cual
+        if (originalUrl.Contains("/api/ImageProxy/"))
+            return originalUrl;
+
+        // Si es una URL externa, usar el proxy
+        if (originalUrl.StartsWith("http"))
+        {
+            return $"{ApiBaseUrl}/api/ImageProxy/get?url={Uri.EscapeDataString(originalUrl)}";
+        }
+
+        // Si es una URL local, usarla directamente
+        return originalUrl;
     }
 }

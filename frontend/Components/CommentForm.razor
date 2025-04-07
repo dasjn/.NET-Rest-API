@@ -1,10 +1,11 @@
 ﻿@using MudBlazor
 @using Microsoft.AspNetCore.Components.Authorization
+@using IA.FrontEnd.Components
 @inject AuthenticationStateProvider AuthStateProvider
 
 <MudPaper Class="pa-3 mb-4" Elevation="0">
     <MudStack Row="true" AlignItems="AlignItems.Start">
-        <MudAvatar Image="@UserProfileImage" Style="width: 40px; height: 40px;" />
+        <UserAvatar CustomImageUrl="@UserProfileImage" Size="40" />
 
         <MudStack Style="flex-grow: 1;">
             <MudTextField @bind-Value="CommentText"
@@ -46,7 +47,7 @@
     [Parameter] public EventCallback OnCancelReply { get; set; }
 
     private string CommentText { get; set; } = string.Empty;
-    private string UserProfileImage { get; set; } = "https://avatar.iran.liara.run/public/job/doctor/male";
+    private string? UserProfileImage { get; set; }
 
     private bool IsReply => ReplyToCommentId.HasValue;
 
