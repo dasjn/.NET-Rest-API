@@ -7,45 +7,49 @@
             <MudCardContent Class="p-0">
                 <MudStack Spacing="3" Row="true" Style="height: 100%; width: 100%;">
                     <MudContainer class="align-items-center d-flex p-0" Style="flex: 0 0 40%;">
-                        @if (!string.IsNullOrEmpty(VideoUri))
-                        {
-                            <MudImage ObjectFit="ObjectFit.Cover"
-                                      Src="@GetVideoThumbnail()"
-                                      ObjectPosition="ObjectPosition.Center"
-                                      Elevation="0"
-                                      Class="rounded-2 w-100"
-                                      Style="aspect-ratio: 16/9;" />
-                        }
-                        else
-                        {
-                            <MudImage ObjectFit="ObjectFit.Cover"
-                                      Src="https://picsum.photos/200/300"
-                                      ObjectPosition="ObjectPosition.Center"
-                                      Elevation="0"
-                                      Class="rounded-2 w-100"
-                                      Style="aspect-ratio: 16/9;" />
-                        }
+                        <MudImage ObjectFit="ObjectFit.Cover"
+                                  Src="@GetVideoThumbnail()"
+                                  ObjectPosition="ObjectPosition.Center"
+                                  Elevation="0"
+                                  Class="rounded-2 w-100"
+                                  Style="aspect-ratio: 16/9;" />
                     </MudContainer>
 
                     <MudStack Spacing="1" Style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start;">
-                        <MudText Typo="Typo.h6"
-                                 Style="display: -webkit-box;
-                                        -webkit-line-clamp: 1;
-                                        -webkit-box-orient: vertical;
-                                        overflow: hidden;
-                                        text-overflow: ellipsis;"
-                                 Title="@Name">
-                            @Name
-                        </MudText>
-                        <MudText Typo="Typo.body2"
+                        <MudText Typo="Typo.subtitle1"
                                  Style="display: -webkit-box;
                                         -webkit-line-clamp: 2;
                                         -webkit-box-orient: vertical;
                                         overflow: hidden;
-                                        text-overflow: ellipsis;"
-                                 Title="@Description">
-                            @Description
+                                        text-overflow: ellipsis;
+                                        font-weight: 500;"
+                                 Title="@Title">
+                            @Title
                         </MudText>
+
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mt-1">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @ChannelName
+                            </MudText>
+
+                            <MudIcon Icon="@Icons.Material.Filled.FiberManualRecord"
+                                     Size="Size.Small"
+                                     Color="Color.Secondary"
+                                     Style="font-size: 0.5rem;" />
+
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @Views views
+                            </MudText>
+
+                            <MudIcon Icon="@Icons.Material.Filled.FiberManualRecord"
+                                     Size="Size.Small"
+                                     Color="Color.Secondary"
+                                     Style="font-size: 0.5rem;" />
+
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @PublishedDate
+                            </MudText>
+                        </MudStack>
                     </MudStack>
                 </MudStack>
             </MudCardContent>
@@ -54,16 +58,14 @@
 </MudItem>
 
 @code {
-    [Parameter] public string VideoUri { get; set; } = string.Empty;
     [Parameter] public long VideoId { get; set; }
-    [Parameter] public string Name { get; set; } = string.Empty;
-    [Parameter] public string Description { get; set; } = string.Empty;
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string ChannelName { get; set; } = string.Empty;
+    [Parameter] public int Views { get; set; }
+    [Parameter] public string PublishedDate { get; set; } = string.Empty;
 
     private string GetVideoThumbnail()
     {
-        // En una implementación real, podríamos generar un thumbnail del video
-        // o usar un endpoint específico para thumbnails
-        // Por ahora, usamos una imagen aleatoria
         return "https://picsum.photos/400/225?random=" + VideoId;
     }
 }

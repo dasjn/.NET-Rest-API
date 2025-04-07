@@ -24,10 +24,11 @@
     {
         @foreach (var video in videos)
         {
-            <VideoCard VideoId="@video.Id"
-                       VideoUri="@video.Uri"
-                       Name="@video.Name"
-                       Description="@video.Description" />
+            <VideoCard VideoId="video.Id"
+                       Title="@video.Name"
+                       ChannelName="@video.UploadedByUserName"
+                       Views="@video.ViewsCount"
+                       PublishedDate="@video.PublishDate.ToString("dd/MM/yyyy")" />
         }
     }
 </MudGrid>
@@ -41,10 +42,11 @@
     <MudGrid Justify="Justify.FlexStart" AlignItems="AlignItems.Start" Spacing="4">
         @foreach (var video in videos.OrderByDescending(v => v.ViewsCount).Take(4))
         {
-            <VideoCard VideoId="@video.Id"
-                       VideoUri="@video.Uri"
-                       Name="@video.Name"
-                       Description="@video.Description" />
+            <VideoCard VideoId="video.Id"
+                       Title="@video.Name"
+                       ChannelName="@video.UploadedByUserName"
+                       Views="@video.ViewsCount"
+                       PublishedDate="@video.PublishDate.ToString("dd/MM/yyyy")" />
         }
     </MudGrid>
 }

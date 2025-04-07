@@ -123,10 +123,11 @@
             <MudStack Spacing="2">
                 @foreach (var video in relatedVideos)
                 {
-                    <VideoCardHorizontal VideoUri="@video.Uri"
-                                         VideoId="@video.Id"
-                                         Name="@video.Name"
-                                         Description="@video.Description" />
+                    <VideoCardHorizontal VideoId="@video.Id"
+                                         Title="@video.Name"
+                                         ChannelName="@video.UploadedByUserName"
+                                         Views="@video.ViewsCount"
+                                         PublishedDate="@video.PublishDate.ToString("dd/MM/yyyy")" />
                 }
             </MudStack>
         }
@@ -218,7 +219,7 @@
             // En una implementación real, habría un endpoint específico para videos relacionados
             // Por ahora, simplemente obtenemos algunos videos y filtramos el actual
             var allVideos = await InteractionService.GetAllVideos();
-            relatedVideos = allVideos?.Where(v => v.Id != VideoId).Take(5).ToList() ?? new List<VideoDto>();
+            relatedVideos = allVideos?.Where(v => v.Id != VideoId).Take(10).ToList() ?? new List<VideoDto>();
         }
         catch
         {
