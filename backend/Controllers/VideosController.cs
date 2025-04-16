@@ -91,6 +91,68 @@ namespace IA.WebAPI.Controllers
             return videos;
         }
 
+        // GET: api/Videos/my-videos
+        [Authorize]
+        [HttpGet("my-videos")]
+        public async Task<ActionResult<IEnumerable<VideoDto>>> GetMyVideos()
+        {
+            long? userId = GetCurrentUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized("No se pudo identificar al usuario");
+            }
+
+            // Obtener solo los videos subidos por el usuario actual, con toda la información necesaria
+            var videosQuery = _context.Videos
+                .Where(v => v.UploadedByUserId == userId.Value)
+                .Select(v => new VideoDto
+                {
+                    Id = v.Id,
+                    Name = v.Name,
+                    Description = v.Description,
+                    PublishDate = v.PublishDate,
+                    Uri = v.Uri,
+                    UploadedByUserId = v.UploadedByUserId,
+                    UploadedByUserName = v.UploadedByUser != null ? v.UploadedByUser.Name : null,
+                    UploadedByUserProfilePictureUrl = v.UploadedByUser != null ? v.UploadedByUser.ProfilePictureUrl : null,
+                    LikesCount = v.Interactions.Count(i => i.Type == InteractionType.Like),
+                    FavoritesCount = v.Interactions.Count(i => i.Type == InteractionType.Favorite),
+                    ViewsCount = v.Interactions.Count(i => i.Type == InteractionType.View),
+                    CommentsCount = v.Comments.Count
+                });
+
+            // Obtener los videos
+            var videos = await videosQuery.ToListAsync();
+
+            // Obtener todas las interacciones del usuario actual en una sola consulta
+            var userInteractions = await _context.VideoInteractions
+                .Where(i => i.UserId == userId.Value)
+                .Select(i => new { i.VideoId, i.Type })
+                .ToListAsync();
+
+            // Agrupar interacciones por video ID para proceso más eficiente
+            var interactionsByVideo = userInteractions
+                .GroupBy(i => i.VideoId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(i => i.Type).ToList()
+                );
+
+            // Completar información de interacciones para cada video
+            foreach (var video in videos)
+            {
+                if (interactionsByVideo.TryGetValue(video.Id, out var interactions))
+                {
+                    video.UserHasLiked = interactions.Contains(InteractionType.Like);
+                    video.UserHasFavorited = interactions.Contains(InteractionType.Favorite);
+                    video.UserHasWatchLater = interactions.Contains(InteractionType.WatchLater);
+                    video.UserHasViewed = interactions.Contains(InteractionType.View);
+                }
+            }
+
+            return videos;
+        }
+
         // GET: api/Videos/5
         [HttpGet("{id}")]
         public async Task<ActionResult<VideoDto>> GetVideo(long id)

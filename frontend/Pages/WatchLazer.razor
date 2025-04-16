@@ -1,0 +1,135 @@
+﻿@page "/see-later"
+@using IA.FrontEnd.Components
+@using IA.FrontEnd.Models
+@using IA.FrontEnd.Services
+@inject VideoInteractionService InteractionService
+@inject ISnackbar Snackbar
+
+<PageTitle>Ver más tarde - Interventional Academy</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Ver más tarde</MudText>
+
+@if (isLoading)
+{
+    <VideoCardSkeletonWrapper />
+}
+else if (videos == null || !videos.Any())
+{
+    <MudItem xs="12">
+        <MudPaper Class="pa-6" Elevation="3">
+            <MudStack Spacing="4" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Outlined.WatchLater" Size="Size.Large" />
+                <MudText Typo="Typo.h6" Align="Align.Center">No tienes videos guardados para ver más tarde</MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center">
+                    Agrega videos a esta lista para verlos cuando tengas tiempo disponible
+                </MudText>
+                <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.VideoLibrary">
+                    Explorar Videos
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+}
+else
+{
+    <MudGrid Justify="Justify.FlexStart" AlignItems="AlignItems.Start" Spacing="4">
+        @foreach (var video in videos)
+        {
+            <VideoCard VideoId="video.Id"
+                       Title="@video.Name"
+                       ChannelName="@video.UploadedByUserName"
+                       Views="@video.ViewsCount"
+                       PublishedDate="@video.PublishDate.ToString("dd/MM/yyyy")" />
+        }
+    </MudGrid>
+
+    <MudDivider Class="my-4" />
+
+    <MudPaper Class="pa-4 mt-2" Elevation="0">
+        <MudText Typo="Typo.subtitle1" Class="mb-2">Gestionar lista "Ver más tarde"</MudText>
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Error"
+                   StartIcon="@Icons.Material.Filled.ClearAll"
+                   OnClick="@(() => OpenClearConfirmationDialog())">
+            Vaciar lista
+        </MudButton>
+    </MudPaper>
+}
+
+@code {
+    private bool isLoading = true;
+    private List<VideoDto>? videos;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadWatchLaterVideos();
+    }
+
+    private async Task LoadWatchLaterVideos()
+    {
+        try
+        {
+            isLoading = true;
+
+            // Utilizamos el endpoint específico para videos "Ver más tarde"
+            var response = await InteractionService.GetWatchLaterVideos();
+            videos = response;
+        }
+        catch (Exception ex)
+        {
+            videos = new List<VideoDto>();
+            Snackbar.Add($"Error al cargar los videos: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenClearConfirmationDialog()
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Confirmar acción",
+            "¿Estás seguro que deseas vaciar tu lista de 'Ver más tarde'? Esta acción no se puede deshacer.",
+            yesText: "Vaciar lista",
+            cancelText: "Cancelar");
+
+        if (result == true)
+        {
+            await ClearWatchLaterList();
+        }
+    }
+
+    private async Task ClearWatchLaterList()
+    {
+        try
+        {
+            isLoading = true;
+
+            // Crear método en el servicio para limpiar la lista
+            bool success = await InteractionService.ClearWatchLaterList();
+
+            if (success)
+            {
+                videos = new List<VideoDto>();
+                Snackbar.Add("Lista 'Ver más tarde' vaciada correctamente", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("No se pudo vaciar la lista", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    [Inject] private IDialogService DialogService { get; set; } = default!;
+}

@@ -1,0 +1,23 @@
+﻿En Package Manager Console
+
+Agregrar migración cuando tienes mas de un DbContext:
+Add-Migration NameMigration -context OdysseyDigestivoContext
+
+
+Aplicar ultima migración cuando tienes mas de un DbContext:
+Update-Database -context OdysseyDigestivoContext
+
+Migrar a un estado anterior (Haría downgrade de todas las migraciones superiores)
+Update-Database -migration NameMigration -context OdysseyDigestivoContext
+
+Update-Database -migration 0 -context EstadisticasContext (migrar a estado inicial de estadisticas)
+
+Eliminar última migración
+Remove-Migration -context OdysseyDigestivoContext
+
+Generar scripts de migraciones para producción https://docs.microsoft.com/en-us/ef/core/managing-schemas/migrations/applying?tabs=vs
+El script generado verifica internamente qué migraciones ya se han aplicado (a través de la tabla del historial de migraciones) y solo aplica las que faltan:
+Script-Migration -Idempotent -context OdysseyDigestivoContext
+
+Generar script de migraciones customizado:
+ej: Script-Migration 20210810090938_Initial 0 -context OdysseyDigestivoContext (ejecuta los down de todas las migraciones) 

@@ -1,0 +1,146 @@
+﻿@page "/history"
+@using IA.FrontEnd.Components
+@using IA.FrontEnd.Models
+@using IA.FrontEnd.Services
+@inject VideoInteractionService InteractionService
+@inject ISnackbar Snackbar
+
+<PageTitle>Historial - Interventional Academy</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Historial de visualización</MudText>
+    <MudSpacer />
+    @if (!isLoading && videos != null && videos.Any())
+    {
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Error"
+                   StartIcon="@Icons.Material.Filled.DeleteSweep"
+                   OnClick="@(() => OpenClearConfirmationDialog())">
+            Borrar historial
+        </MudButton>
+    }
+</MudStack>
+
+@if (isLoading)
+{
+    <VideoCardSkeletonWrapper />
+}
+else if (videos == null || !videos.Any())
+{
+    <MudItem xs="12">
+        <MudPaper Class="pa-6" Elevation="3">
+            <MudStack Spacing="4" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Outlined.History" Size="Size.Large" />
+                <MudText Typo="Typo.h6" Align="Align.Center">Tu historial está vacío</MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center">
+                    Los videos que veas aparecerán aquí para que puedas retomar fácilmente tu aprendizaje
+                </MudText>
+                <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.VideoLibrary">
+                    Explorar Videos
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+}
+else
+{
+    <MudPaper Class="pa-3 mb-3" Elevation="0">
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Tu historial se almacena y puede ser eliminado en cualquier momento. Los videos aparecen ordenados por fecha de visualización, del más reciente al más antiguo.
+        </MudText>
+    </MudPaper>
+
+    <MudDivider />
+
+    <MudStack Spacing="0" Class="mt-2">
+        @foreach (var video in videos)
+        {
+            <MudPaper Class="pa-2" Elevation="0">
+                <VideoCardHorizontal VideoId="video.Id"
+                                     Title="@video.Name"
+                                     ChannelName="@video.UploadedByUserName"
+                                     Views="@video.ViewsCount"
+                                     PublishedDate="@video.PublishDate.ToString("dd/MM/yyyy")" />
+            </MudPaper>
+            <MudDivider />
+        }
+    </MudStack>
+}
+
+@code {
+    private bool isLoading = true;
+    private List<VideoDto>? videos;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadHistoryVideos();
+    }
+
+    private async Task LoadHistoryVideos()
+    {
+        try
+        {
+            isLoading = true;
+
+            // Utilizamos el endpoint específico para historial
+            var response = await InteractionService.GetViewedVideos();
+            videos = response;
+        }
+        catch (Exception ex)
+        {
+            videos = new List<VideoDto>();
+            Snackbar.Add($"Error al cargar el historial: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenClearConfirmationDialog()
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Confirmar eliminación",
+            "¿Estás seguro que deseas borrar todo tu historial de visualización? Esta acción no se puede deshacer.",
+            yesText: "Borrar historial",
+            cancelText: "Cancelar");
+
+        if (result == true)
+        {
+            await ClearHistory();
+        }
+    }
+
+    private async Task ClearHistory()
+    {
+        try
+        {
+            isLoading = true;
+
+            // Crear método en el servicio para limpiar historial
+            bool success = await InteractionService.ClearHistory();
+
+            if (success)
+            {
+                videos = new List<VideoDto>();
+                Snackbar.Add("Historial eliminado correctamente", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("No se pudo eliminar el historial", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    [Inject] private IDialogService DialogService { get; set; } = default!;
+}

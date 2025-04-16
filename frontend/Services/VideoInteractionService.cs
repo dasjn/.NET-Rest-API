@@ -23,6 +23,7 @@ namespace IA.FrontEnd.Services
             _apiBaseUrl = configuration["ApiBaseUrl"] ?? "https://localhost:7113";
         }
 
+
         #region User Video Interactions (Likes, Favorites, Watch Later)
 
         public async Task<bool> LikeVideo(long videoId)
@@ -219,6 +220,144 @@ namespace IA.FrontEnd.Services
             }
         }
 
+        public async Task<List<VideoDto>> GetMyVideos()
+        {
+            try
+            {
+                var token = await _authStateProvider.GetTokenAsync();
+                if (string.IsNullOrEmpty(token))
+                    return new List<VideoDto>();
+
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+                var videos = await _httpClient.GetFromJsonAsync<List<VideoDto>>($"{_apiBaseUrl}/api/videos/my-videos");
+                return videos ?? new List<VideoDto>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error al obtener mis videos: {ex.Message}");
+                return new List<VideoDto>();
+            }
+        }
+
+        public async Task<List<VideoDto>> GetLikedVideos()
+        {
+            try
+            {
+                var token = await _authStateProvider.GetTokenAsync();
+                if (string.IsNullOrEmpty(token))
+                    return new List<VideoDto>();
+
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+                var videos = await _httpClient.GetFromJsonAsync<List<VideoDto>>($"{_apiBaseUrl}/api/user-videos/likes");
+                return videos ?? new List<VideoDto>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error al obtener videos con 'me gusta': {ex.Message}");
+                return new List<VideoDto>();
+            }
+        }
+
+        // Videos marcados para "Ver más tarde"
+        public async Task<List<VideoDto>> GetWatchLaterVideos()
+        {
+            try
+            {
+                var token = await _authStateProvider.GetTokenAsync();
+                if (string.IsNullOrEmpty(token))
+                    return new List<VideoDto>();
+
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+                var videos = await _httpClient.GetFromJsonAsync<List<VideoDto>>($"{_apiBaseUrl}/api/user-videos/watch-later");
+                return videos ?? new List<VideoDto>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error al obtener videos de 'ver más tarde': {ex.Message}");
+                return new List<VideoDto>();
+            }
+        }
+
+        // Videos vistos (historial)
+        public async Task<List<VideoDto>> GetViewedVideos()
+        {
+            try
+            {
+                var token = await _authStateProvider.GetTokenAsync();
+                if (string.IsNullOrEmpty(token))
+                    return new List<VideoDto>();
+
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+                var videos = await _httpClient.GetFromJsonAsync<List<VideoDto>>($"{_apiBaseUrl}/api/user-videos/history");
+                return videos ?? new List<VideoDto>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error al obtener historial de videos: {ex.Message}");
+                return new List<VideoDto>();
+            }
+        }
+
+        // Limpiar historial de vistas
+        public async Task<bool> ClearHistory()
+        {
+            try
+            {
+                var token = await _authStateProvider.GetTokenAsync();
+                if (string.IsNullOrEmpty(token))
+                    return false;
+
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+                var response = await _httpClient.DeleteAsync($"{_apiBaseUrl}/api/user-videos/history");
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error al limpiar historial: {ex.Message}");
+                return false;
+            }
+        }
+
+        // Limpiar lista de "Ver más tarde"
+        public async Task<bool> ClearWatchLaterList()
+        {
+            try
+            {
+                var token = await _authStateProvider.GetTokenAsync();
+                if (string.IsNullOrEmpty(token))
+                    return false;
+
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+                // Primero obtenemos la lista actual para procesar cada video
+                var watchLaterVideos = await GetWatchLaterVideos();
+                if (watchLaterVideos == null || !watchLaterVideos.Any())
+                    return true; // No hay nada que eliminar
+
+                // Eliminar cada video de la lista
+                bool allSuccess = true;
+                foreach (var video in watchLaterVideos)
+                {
+                    bool success = await RemoveFromWatchLater(video.Id);
+                    if (!success)
+                        allSuccess = false;
+                }
+
+                return allSuccess;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error al limpiar lista 'Ver más tarde': {ex.Message}");
+                return false;
+            }
+        }
+
+        // to do: Implementar un metodo de labeling para que los videos se recomienden a los usuarios en base a sus gustos
         public async Task<List<VideoDto>> GetRecommendedVideos(long currentVideoId)
         {
             try

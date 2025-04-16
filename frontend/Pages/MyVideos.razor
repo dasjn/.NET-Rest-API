@@ -1,0 +1,82 @@
+﻿@page "/my-videos"
+@inject HttpClient Http
+@using IA.FrontEnd.Components
+@using IA.FrontEnd.Models
+@using IA.FrontEnd.Services
+@inject VideoInteractionService InteractionService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+
+<PageTitle>Mis Videos - Interventional Academy</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Mis Videos</MudText>
+
+@if (isLoading)
+{
+    <VideoCardSkeletonWrapper />
+}
+else if (videos == null || !videos.Any())
+{
+    <MudItem xs="12">
+        <MudPaper Class="pa-6" Elevation="3">
+            <MudStack Spacing="4" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Outlined.VideoLibrary" Size="Size.Large" />
+                <MudText Typo="Typo.h6" Align="Align.Center">No has subido ningún video todavía</MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center">
+                    Comienza a compartir tu conocimiento con la comunidad subiendo tu primer video
+                </MudText>
+                <MudButton Href="/upload-video" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudUpload">
+                    Subir Video
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+}
+else
+{
+    <MudGrid Justify="Justify.FlexStart" AlignItems="AlignItems.Start" Spacing="4">
+        @foreach (var video in videos)
+        {
+            <VideoCard VideoId="video.Id"
+                       Title="@video.Name"
+                       ChannelName="@video.UploadedByUserName"
+                       Views="@video.ViewsCount"
+                       PublishedDate="@video.PublishDate.ToString("dd/MM/yyyy")" />
+        }
+    </MudGrid>
+
+    <MudStack Row="true" Class="mt-4 justify-center">
+        <MudButton Href="/upload-video" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.CloudUpload">
+            Subir otro Video
+        </MudButton>
+    </MudStack>
+}
+
+@code {
+    private bool isLoading = true;
+    private List<VideoDto>? videos;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadMyVideos();
+    }
+
+    private async Task LoadMyVideos()
+    {
+        try
+        {
+            // Obtener directamente los videos del usuario desde el servidor
+            videos = await InteractionService.GetMyVideos();
+        }
+        catch (Exception ex)
+        {
+            videos = new List<VideoDto>();
+            Snackbar.Add($"Error al cargar tus videos: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+}

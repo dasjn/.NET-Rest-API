@@ -1,0 +1,77 @@
+﻿@page "/liked-videos"
+@using IA.FrontEnd.Components
+@using IA.FrontEnd.Models
+@using IA.FrontEnd.Services
+@inject VideoInteractionService InteractionService
+@inject ISnackbar Snackbar
+
+<PageTitle>Videos que me gustan - Interventional Academy</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Videos que me gustan</MudText>
+
+@if (isLoading)
+{
+    <VideoCardSkeletonWrapper />
+}
+else if (videos == null || !videos.Any())
+{
+    <MudItem xs="12">
+        <MudPaper Class="pa-6" Elevation="3">
+            <MudStack Spacing="4" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Outlined.ThumbUp" Size="Size.Large" />
+                <MudText Typo="Typo.h6" Align="Align.Center">Aún no has marcado ningún video como "Me gusta"</MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center">
+                    Explora nuestro catálogo de videos y marca como "Me gusta" aquellos que más te interesen para encontrarlos fácilmente aquí
+                </MudText>
+                <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.VideoLibrary">
+                    Explorar Videos
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+}
+else
+{
+    <MudGrid Justify="Justify.FlexStart" AlignItems="AlignItems.Start" Spacing="4">
+        @foreach (var video in videos)
+        {
+            <VideoCard VideoId="video.Id"
+                       Title="@video.Name"
+                       ChannelName="@video.UploadedByUserName"
+                       Views="@video.ViewsCount"
+                       PublishedDate="@video.PublishDate.ToString("dd/MM/yyyy")" />
+        }
+    </MudGrid>
+}
+
+@code {
+    private bool isLoading = true;
+    private List<VideoDto>? videos;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLikedVideos();
+    }
+
+    private async Task LoadLikedVideos()
+    {
+        try
+        {
+            isLoading = true;
+
+            // Utilizamos el endpoint específico para videos con "me gusta"
+            var response = await InteractionService.GetLikedVideos();
+            videos = response;
+        }
+        catch (Exception ex)
+        {
+            videos = new List<VideoDto>();
+            Snackbar.Add($"Error al cargar los videos: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+}
