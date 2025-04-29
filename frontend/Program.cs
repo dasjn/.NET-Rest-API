@@ -12,9 +12,6 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
-// Configurar HttpClient
-builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
-
 // Configuración
 builder.Services.AddSingleton(provider =>
 {
@@ -22,6 +19,10 @@ builder.Services.AddSingleton(provider =>
     var apiBaseUrl = config["ApiBaseUrl"] ?? "https://localhost:7113";
     return new ConfigurationSettings { ApiBaseUrl = apiBaseUrl };
 });
+
+// Configurar HttpClient con la URL del backend
+var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "https://localhost:7113";
+builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
 
 // Servicios de autenticación
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();

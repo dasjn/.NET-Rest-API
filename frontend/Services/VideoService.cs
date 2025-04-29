@@ -24,7 +24,7 @@ namespace IA.FrontEnd.Services
 
             // Configurar URLs desde configuración
             _apiBaseUrl = configuration["ApiBaseUrl"] ?? "https://localhost:7113";
-            _videosApiEndpoint = "/api/videos";
+            _videosApiEndpoint = "/api/Videos";
         }
 
         public async Task<(bool Success, Video? Video, string? ErrorMessage)> UploadVideoAsync(

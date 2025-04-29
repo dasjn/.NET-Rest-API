@@ -433,7 +433,7 @@ else
                 string videoUri = VideoService.FormatVideoUrl(videoEntity.Uri);
 
                 // Navegar a la página del video
-                Navigation.NavigateTo($"/video/{Uri.EscapeDataString(videoUri)}");
+                Navigation.NavigateTo($"/video/{videoEntity.Id}");
             }
             else
             {
