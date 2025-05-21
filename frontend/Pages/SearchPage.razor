@@ -1,0 +1,310 @@
+﻿@page "/search"
+@using IA.FrontEnd.Components
+@using IA.FrontEnd.Models
+@using IA.FrontEnd.Services
+@using Microsoft.AspNetCore.WebUtilities
+@using MudBlazor.Services
+@implements IBrowserViewportObserver
+@implements IAsyncDisposable
+@inject VideoInteractionService InteractionService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+@inject IBrowserViewportService BrowserViewportService
+
+<PageTitle>@GetPageTitle()</PageTitle>
+
+<MudStack Row="@_row" Reverse="false" Breakpoint="@_breakpoint" Class="mb-4">
+    <MudText Typo="Typo.h4">@GetResultsTitle()</MudText>
+    <MudSpacer />
+    <div class="@(_currentBreakpoint <= Breakpoint.Sm ? "w-100" : "")">
+        <SearchComponent @ref="searchComponent" Context="@searchContext" OnSearch="HandleSearch"
+                         Style="@(_currentBreakpoint <= Breakpoint.Sm ? "width: 100%" : "width: 100%; max-width: 300px;")" />
+    </div>
+</MudStack>
+
+@if (!string.IsNullOrEmpty(searchQuery))
+{
+    <MudStack Row="@_row" Reverse="false" Breakpoint="@_breakpoint" Class="mb-4">
+        <MudAlert Severity="Severity.Info" Class="@(_currentBreakpoint <= Breakpoint.Sm ? "w-100" : "")">
+            <span>Mostrando resultados para: <strong>"@searchQuery"</strong> @GetContextDescription()</span>
+        </MudAlert>
+        <MudSpacer />
+        <div class="@(_currentBreakpoint <= Breakpoint.Sm ? "w-100 mt-2" : "")">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Home"
+                       OnClick="ClearAndGoHome"
+                       Class="@(_currentBreakpoint <= Breakpoint.Sm ? "w-100" : "")">
+                LIMPIAR Y VOLVER AL INICIO
+            </MudButton>
+        </div>
+    </MudStack>
+}
+
+@if (isLoading)
+{
+    <VideoCardSkeletonWrapper />
+}
+else if (videos == null || !videos.Any())
+{
+    <MudItem xs="12">
+        <MudPaper Class="pa-6" Elevation="3">
+            <MudStack Spacing="4" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Outlined.SearchOff" Size="Size.Large" />
+                <MudText Typo="Typo.h6" Align="Align.Center">No se encontraron resultados para "@searchQuery" @GetContextDescription()</MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center">
+                    Prueba con diferentes palabras clave o ajusta los criterios de búsqueda
+                </MudText>
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Href="@GetBackUrl()" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack">
+                        Volver a @GetContextName()
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="ClearAndGoHome" StartIcon="@Icons.Material.Filled.Home">
+                        Ir al inicio
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+}
+else
+{
+    <MudGrid Justify="Justify.FlexStart" AlignItems="AlignItems.Start" Spacing="4">
+        @foreach (var video in videos)
+        {
+            <VideoCard VideoId="video.Id"
+                       Title="@video.Name"
+                       ChannelName="@video.UploadedByUserName"
+                       Views="@video.ViewsCount"
+                       PublishedDate="@video.PublishDate.ToString("dd/MM/yyyy")" />
+        }
+    </MudGrid>
+}
+
+@code {
+    private bool isLoading = true;
+    private List<VideoDto>? videos;
+    private string searchQuery = string.Empty;
+    private string searchContext = "all";
+    private SearchComponent? searchComponent;
+
+    // Nuevo para el responsive
+    private Breakpoint _breakpoint = Breakpoint.SmAndDown;
+    private bool _row = true;
+    private Breakpoint _currentBreakpoint = Breakpoint.Md; // Valor predeterminado
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReadQueryParameters();
+        NavigationManager.LocationChanged += HandleLocationChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await BrowserViewportService.SubscribeAsync(this, fireImmediately: true);
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    // Implementaciones requeridas para IBrowserViewportObserver
+    Guid IBrowserViewportObserver.Id { get; } = Guid.NewGuid();
+
+    ResizeOptions IBrowserViewportObserver.ResizeOptions { get; } = new()
+        {
+            ReportRate = 250,
+            NotifyOnBreakpointOnly = true
+        };
+
+    Task IBrowserViewportObserver.NotifyBrowserViewportChangeAsync(BrowserViewportEventArgs args)
+    {
+        _currentBreakpoint = args.Breakpoint;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    // Limpieza de recursos
+    public async ValueTask DisposeAsync()
+    {
+        NavigationManager.LocationChanged -= HandleLocationChanged;
+        await BrowserViewportService.UnsubscribeAsync(this);
+    }
+
+    private async Task ReadQueryParameters()
+    {
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        var queryParams = QueryHelpers.ParseQuery(uri.Query);
+
+        if (queryParams.TryGetValue("q", out var q))
+        {
+            searchQuery = q.ToString();
+
+            // Obtener el contexto de búsqueda si existe
+            if (queryParams.TryGetValue("context", out var context))
+            {
+                searchContext = context.ToString();
+            }
+
+            await SearchVideos(searchQuery, searchContext);
+
+            // Actualizar el campo de búsqueda con la consulta actual
+            if (searchComponent != null)
+            {
+                await InvokeAsync(() =>
+                {
+                    searchComponent.SetQuery(searchQuery);
+                    StateHasChanged();
+                });
+            }
+        }
+        else
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        var uri = NavigationManager.ToAbsoluteUri(e.Location);
+
+        // Check if we're still on the search page
+        if (uri.AbsolutePath == "/search")
+        {
+            var queryParams = QueryHelpers.ParseQuery(uri.Query);
+
+            string newQuery = string.Empty;
+            string newContext = "all";
+
+            if (queryParams.TryGetValue("q", out var q))
+            {
+                newQuery = q.ToString();
+            }
+
+            if (queryParams.TryGetValue("context", out var c))
+            {
+                newContext = c.ToString();
+            }
+
+            if (newQuery != searchQuery || newContext != searchContext)
+            {
+                searchQuery = newQuery;
+                searchContext = newContext;
+
+                // Update search field
+                if (searchComponent != null)
+                {
+                    searchComponent.SetQuery(searchQuery);
+                }
+
+                InvokeAsync(() => SearchVideos(searchQuery, searchContext));
+            }
+        }
+    }
+
+    private void ClearAndGoHome()
+    {
+        // Limpiar búsqueda y navegar al inicio
+        NavigationManager.NavigateTo("/", forceLoad: false);
+    }
+
+    private async Task HandleSearch(string query)
+    {
+        // Actualizar la URL sin recargar la página completa
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        var baseUri = uri.GetLeftPart(UriPartial.Path);
+
+        // Construir nueva URL con los parámetros actualizados
+        string newUri;
+        if (searchContext != "all")
+        {
+            newUri = $"{baseUri}?q={Uri.EscapeDataString(query)}&context={searchContext}";
+        }
+        else
+        {
+            newUri = $"{baseUri}?q={Uri.EscapeDataString(query)}";
+        }
+
+        // Navegar a la nueva URL para actualizar el historial del navegador
+        NavigationManager.NavigateTo(newUri, forceLoad: false);
+
+        // No es necesario llamar a SearchVideos aquí, ya que HandleLocationChanged se encargará de ello
+    }
+
+    private async Task SearchVideos(string query, string context)
+    {
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+
+            // Usar el nuevo método de búsqueda contextual
+            videos = await InteractionService.SearchVideosWithContext(query, context);
+        }
+        catch (Exception ex)
+        {
+            videos = new List<VideoDto>();
+            Snackbar.Add($"Error al buscar videos: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetPageTitle()
+    {
+        string contextName = GetContextName();
+        return string.IsNullOrEmpty(searchQuery)
+            ? $"Búsqueda - {contextName}"
+            : $"Resultados para \"{searchQuery}\" en {contextName}";
+    }
+
+    private string GetResultsTitle()
+    {
+        string contextDesc = GetContextDescription();
+        return string.IsNullOrEmpty(searchQuery)
+            ? $"Buscar videos {contextDesc}"
+            : $"Resultados para \"{searchQuery}\" {contextDesc}";
+    }
+
+    private string GetContextName()
+    {
+        return searchContext.ToLower() switch
+        {
+            "myvideos" => "Mis Videos",
+            "history" => "Historial",
+            "liked" => "Videos que me gustan",
+            "watchlater" => "Ver más tarde",
+            "favorites" => "Favoritos",
+            _ => "Interventional Academy"
+        };
+    }
+
+    private string GetContextDescription()
+    {
+        return searchContext.ToLower() switch
+        {
+            "myvideos" => "en Mis Videos",
+            "history" => "en Historial",
+            "liked" => "en Videos que me gustan",
+            "watchlater" => "en Ver más tarde",
+            "favorites" => "en Favoritos",
+            _ => ""
+        };
+    }
+
+    private string GetBackUrl()
+    {
+        return searchContext.ToLower() switch
+        {
+            "myvideos" => "/my-videos",
+            "history" => "/history",
+            "liked" => "/liked-videos",
+            "watchlater" => "/see-later",
+            "favorites" => "/liked-videos", // Actualmente usamos liked-videos para los favoritos también
+            _ => "/"
+        };
+    }
+}

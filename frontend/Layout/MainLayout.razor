@@ -6,6 +6,7 @@
 
 @* Proveedores de MudBlazor para toda la aplicación*@
 <MudThemeProvider Theme="@_mainLayoutVM.Theme" IsDarkMode="_mainLayoutVM.IsDarkMode" />
+<MudBreakpointProvider/>
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
@@ -13,16 +14,15 @@
 <MudLayout>
     <MudAppBar>
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@DrawerToggle" />
-        <MudText Typo="Typo.h5" Class="ml-3">Interventional Academy</MudText>
+        <MudText Typo="Typo.h5" Class="ml-3 d-none d-sm-flex">Interventional Academy</MudText>
         <MudSpacer />
-
         <AuthorizeView>
             <Authorized>
                 <MudMenu Direction="Direction.Left" OffsetY="true" Dense="true">
                     <ActivatorContent>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Class="ml-2 mr-2">
                             <UserAvatar />
-                            <MudText>@context.User.Identity.Name</MudText>
+                            <MudText Class="d-none d-sm-flex">@context.User.Identity?.Name</MudText>
                         </MudStack>
                     </ActivatorContent>
                     <ChildContent>
@@ -31,7 +31,6 @@
                 </MudMenu>
             </Authorized>
         </AuthorizeView>
-
         <MudIconButton Icon="@(DarkLightModeButtonIcon)" Color="Color.Inherit" OnClick="@DarkModeToggle" />
         <MudIconButton Icon="@Icons.Material.Filled.MoreVert" Color="Color.Inherit" Edge="Edge.End" />
     </MudAppBar>

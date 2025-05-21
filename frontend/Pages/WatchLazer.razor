@@ -2,12 +2,23 @@
 @using IA.FrontEnd.Components
 @using IA.FrontEnd.Models
 @using IA.FrontEnd.Services
+@using MudBlazor.Services
+@implements IBrowserViewportObserver
+@implements IAsyncDisposable
 @inject VideoInteractionService InteractionService
 @inject ISnackbar Snackbar
+@inject IBrowserViewportService BrowserViewportService
 
 <PageTitle>Ver más tarde - Interventional Academy</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Ver más tarde</MudText>
+<MudStack Row="@_row" Reverse="false" Breakpoint="@_breakpoint" Class="mb-4">
+    <MudText Typo="Typo.h4">Ver más tarde</MudText>
+    <MudSpacer />
+    <div class="@(_currentBreakpoint <= Breakpoint.Sm ? "w-100" : "")">
+        <SearchComponent @ref="searchComponent" Context="watchlater" OnSearch="HandleSearch"
+                         Style="@(_currentBreakpoint <= Breakpoint.Sm ? "width: 100%" : "width: 100%; max-width: 300px;")" />
+    </div>
+</MudStack>
 
 @if (isLoading)
 {
@@ -19,9 +30,15 @@ else if (videos == null || !videos.Any())
         <MudPaper Class="pa-6" Elevation="3">
             <MudStack Spacing="4" AlignItems="AlignItems.Center">
                 <MudIcon Icon="@Icons.Material.Outlined.WatchLater" Size="Size.Large" />
-                <MudText Typo="Typo.h6" Align="Align.Center">No tienes videos guardados para ver más tarde</MudText>
+                <MudText Typo="Typo.h6" Align="Align.Center">
+                    @(string.IsNullOrEmpty(currentSearchQuery)
+                        ? "No tienes videos guardados para ver más tarde"
+                        : $"No se encontraron resultados para \"{currentSearchQuery}\" en tu lista de Ver más tarde")
+                </MudText>
                 <MudText Typo="Typo.body1" Align="Align.Center">
-                    Agrega videos a esta lista para verlos cuando tengas tiempo disponible
+                    @(string.IsNullOrEmpty(currentSearchQuery)
+                        ? "Agrega videos a esta lista para verlos cuando tengas tiempo disponible"
+                        : "Intenta con diferentes términos de búsqueda o agrega más videos a tu lista")
                 </MudText>
                 <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.VideoLibrary">
                     Explorar Videos
@@ -32,6 +49,25 @@ else if (videos == null || !videos.Any())
 }
 else
 {
+    @if (!string.IsNullOrEmpty(currentSearchQuery))
+    {
+        <MudStack Row="@_row" Reverse="false" Breakpoint="@_breakpoint" Class="mb-4">
+            <MudAlert Severity="Severity.Info" Class="@(_currentBreakpoint <= Breakpoint.Sm ? "w-100" : "")">
+                Mostrando resultados para: "@currentSearchQuery"
+            </MudAlert>
+            <MudSpacer />
+            <div class="@(_currentBreakpoint <= Breakpoint.Sm ? "w-100 mt-2" : "")">
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Clear"
+                           OnClick="ClearSearch"
+                           Class="@(_currentBreakpoint <= Breakpoint.Sm ? "w-100" : "")">
+                    Limpiar Búsqueda
+                </MudButton>
+            </div>
+        </MudStack>
+    }
+
     <MudGrid Justify="Justify.FlexStart" AlignItems="AlignItems.Start" Spacing="4">
         @foreach (var video in videos)
         {
@@ -59,10 +95,47 @@ else
 @code {
     private bool isLoading = true;
     private List<VideoDto>? videos;
+    private string currentSearchQuery = string.Empty;
+    private SearchComponent? searchComponent;
+
+    // Nuevo para el responsive
+    private Breakpoint _breakpoint = Breakpoint.SmAndDown;
+    private bool _row = true;
+    private Breakpoint _currentBreakpoint = Breakpoint.Md; // Valor predeterminado
 
     protected override async Task OnInitializedAsync()
     {
         await LoadWatchLaterVideos();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await BrowserViewportService.SubscribeAsync(this, fireImmediately: true);
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    // Implementaciones requeridas para IBrowserViewportObserver
+    Guid IBrowserViewportObserver.Id { get; } = Guid.NewGuid();
+
+    ResizeOptions IBrowserViewportObserver.ResizeOptions { get; } = new()
+        {
+            ReportRate = 250,
+            NotifyOnBreakpointOnly = true
+        };
+
+    Task IBrowserViewportObserver.NotifyBrowserViewportChangeAsync(BrowserViewportEventArgs args)
+    {
+        _currentBreakpoint = args.Breakpoint;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    // Limpieza de recursos
+    public async ValueTask DisposeAsync()
+    {
+        await BrowserViewportService.UnsubscribeAsync(this);
     }
 
     private async Task LoadWatchLaterVideos()
@@ -70,10 +143,18 @@ else
         try
         {
             isLoading = true;
+            StateHasChanged();
 
-            // Utilizamos el endpoint específico para videos "Ver más tarde"
-            var response = await InteractionService.GetWatchLaterVideos();
-            videos = response;
+            // Si hay una búsqueda activa, usar la búsqueda contextual
+            if (!string.IsNullOrWhiteSpace(currentSearchQuery))
+            {
+                videos = await InteractionService.SearchVideosWithContext(currentSearchQuery, "watchlater");
+            }
+            else
+            {
+                // Si no hay búsqueda, cargar todos los videos de "ver más tarde"
+                videos = await InteractionService.GetWatchLaterVideos();
+            }
         }
         catch (Exception ex)
         {
@@ -106,12 +187,18 @@ else
         try
         {
             isLoading = true;
+            StateHasChanged();
 
-            // Crear método en el servicio para limpiar la lista
             bool success = await InteractionService.ClearWatchLaterList();
 
             if (success)
             {
+                currentSearchQuery = string.Empty; // Limpiar búsqueda activa
+                                                   // Limpiar el campo de búsqueda
+                if (searchComponent != null)
+                {
+                    searchComponent.Clear();
+                }
                 videos = new List<VideoDto>();
                 Snackbar.Add("Lista 'Ver más tarde' vaciada correctamente", Severity.Success);
             }
@@ -129,6 +216,23 @@ else
             isLoading = false;
             StateHasChanged();
         }
+    }
+
+    private async Task HandleSearch(string query)
+    {
+        currentSearchQuery = query;
+        await LoadWatchLaterVideos();
+    }
+
+    private async Task ClearSearch()
+    {
+        currentSearchQuery = string.Empty;
+        // Limpiar el campo de búsqueda
+        if (searchComponent != null)
+        {
+            searchComponent.Clear();
+        }
+        await LoadWatchLaterVideos();
     }
 
     [Inject] private IDialogService DialogService { get; set; } = default!;

@@ -1,0 +1,217 @@
+﻿@using Microsoft.AspNetCore.Components.Web
+@using MudBlazor
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<div class="d-flex align-center position-relative @Class" style="@Style">
+    <MudTextField @bind-Value="SearchQuery"
+                  Label="@GetSearchPlaceholder()"
+                  Variant="Variant.Outlined"
+                  Adornment="Adornment.End"
+                  AdornmentIcon="@Icons.Material.Filled.Search"
+                  AdornmentColor="Color.Primary"
+                  OnAdornmentClick="PerformSearch"
+                  OnKeyDown="HandleKeyDown"
+                  OnFocus="@(() => ShowSuggestions = true)"
+                  OnBlur="@HandleBlur"
+                  Immediate="true"
+                  FullWidth="@FullWidth"
+                  Dense="true" />
+
+    @if (ShowSuggestions && FilteredSearches.Any())
+    {
+        <div class="position-absolute search-suggestions-popup" style="top: 100%; left: 0; right: 0; z-index: 1500;">
+            <MudPaper Elevation="2" Class="pa-2 mt-1" Style="width: 100%;">
+                <MudList T="string" Clickable="true" Dense="true">
+                    @foreach (var search in FilteredSearches)
+                    {
+                        <MudListItem T="string"
+                                     Text="@search"
+                                     OnClick="@(() => SelectSuggestion(search))"
+                                     Icon="@Icons.Material.Filled.History" />
+                    }
+                </MudList>
+            </MudPaper>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Class { get; set; } = string.Empty;
+    [Parameter] public string Style { get; set; } = string.Empty;
+    [Parameter] public bool FullWidth { get; set; } = false;
+    [Parameter] public EventCallback<string> OnSearch { get; set; }
+    [Parameter] public string Context { get; set; } = "all"; // Posibles valores: all, myvideos, history, liked, watchlater
+
+    private string SearchQuery { get; set; } = string.Empty;
+    private List<string> RecentSearches { get; set; } = new List<string>();
+    private bool ShowSuggestions { get; set; } = false;
+
+    // Propiedad calculada para filtrar sugerencias basadas en la consulta actual
+    private IEnumerable<string> FilteredSearches =>
+        string.IsNullOrWhiteSpace(SearchQuery)
+            ? RecentSearches.Take(5)
+            : RecentSearches
+                .Where(s => s.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase))
+                .Take(5);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRecentSearches();
+    }
+
+    // Método público para limpiar el campo de búsqueda desde fuera
+    public void Clear()
+    {
+        SearchQuery = string.Empty;
+        ShowSuggestions = false;
+        StateHasChanged();
+    }
+
+    // Método público para establecer el valor del campo de búsqueda desde fuera
+    public void SetQuery(string query)
+    {
+        SearchQuery = query;
+        StateHasChanged();
+    }
+
+    private string GetSearchPlaceholder()
+    {
+        return Context.ToLower() switch
+        {
+            "myvideos" => "Search in my videos...",
+            "history" => "Search in history...",
+            "liked" => "Search in liked videos...",
+            "watchlater" => "Search in watch later...",
+            "favorites" => "Search in favorites...",
+            _ => "Search..."
+        };
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            ShowSuggestions = false;
+            await PerformSearch();
+        }
+        else if (e.Key == "Escape")
+        {
+            ShowSuggestions = false;
+        }
+        else if (e.Key == "ArrowDown" && FilteredSearches.Any())
+        {
+            // Base para implementar navegación con teclado
+            ShowSuggestions = true;
+        }
+        else
+        {
+            // Mostrar sugerencias si hay coincidencias
+            ShowSuggestions = FilteredSearches.Any();
+        }
+    }
+
+    // Pequeño retraso para permitir que el clic en sugerencias funcione antes de ocultar
+    private async Task HandleBlur()
+    {
+        await Task.Delay(200);
+        ShowSuggestions = false;
+        StateHasChanged();
+    }
+
+    private async Task PerformSearch()
+    {
+        if (string.IsNullOrWhiteSpace(SearchQuery))
+            return;
+
+        string currentQuery = SearchQuery;
+
+        // Guardar en búsquedas recientes
+        await SaveToRecentSearches(currentQuery);
+
+        if (OnSearch.HasDelegate)
+        {
+            await OnSearch.InvokeAsync(currentQuery);
+        }
+        else
+        {
+            // Navegar a la página de resultados con el contexto
+            if (Context != "all")
+            {
+                NavigationManager.NavigateTo($"/search?q={Uri.EscapeDataString(currentQuery)}&context={Context}");
+            }
+            else
+            {
+                NavigationManager.NavigateTo($"/search?q={Uri.EscapeDataString(currentQuery)}");
+            }
+        }
+    }
+
+    private async Task LoadRecentSearches()
+    {
+        try
+        {
+            var json = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "recentSearches");
+            if (!string.IsNullOrEmpty(json))
+            {
+                var searches = System.Text.Json.JsonSerializer.Deserialize<List<string>>(json);
+                if (searches != null)
+                {
+                    RecentSearches = searches;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading recent searches: {ex.Message}");
+            RecentSearches = new List<string>();
+        }
+    }
+
+    private async Task SaveToRecentSearches(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return;
+
+        // Trabajar con una copia local
+        var searches = new List<string>(RecentSearches);
+
+        // Eliminar si ya existe (ignorando mayúsculas/minúsculas)
+        var existing = searches.FirstOrDefault(s =>
+            string.Equals(s, query, StringComparison.OrdinalIgnoreCase));
+
+        if (existing != null)
+            searches.Remove(existing);
+
+        // Añadir al principio
+        searches.Insert(0, query);
+
+        // Limitar a 10 búsquedas
+        if (searches.Count > 10)
+            searches.RemoveRange(10, searches.Count - 10);
+
+        // Actualizar la lista y guardar
+        RecentSearches = searches;
+        await SaveRecentSearchesToLocalStorage();
+    }
+
+    private async Task SaveRecentSearchesToLocalStorage()
+    {
+        try
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(RecentSearches);
+            await JSRuntime.InvokeVoidAsync("localStorage.setItem", "recentSearches", json);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving recent searches: {ex.Message}");
+        }
+    }
+
+    private async Task SelectSuggestion(string suggestion)
+    {
+        SearchQuery = suggestion;
+        ShowSuggestions = false;
+        await PerformSearch();
+    }
+}

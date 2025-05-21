@@ -153,6 +153,77 @@ namespace IA.WebAPI.Controllers
             return videos;
         }
 
+        [HttpGet("search")]
+        public async Task<ActionResult<IEnumerable<VideoDto>>> SearchVideos([FromQuery] string query)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                return await GetVideos(); // Return all videos if no query is provided
+            }
+
+            long? userId = User.Identity?.IsAuthenticated == true ? GetCurrentUserId() : null;
+
+            // Normalize the search query to improve matching
+            query = query.ToLower().Trim();
+
+            // Search videos by name, description, and uploader name
+            var videosQuery = _context.Videos
+                .Where(v => v.Name.ToLower().Contains(query) ||
+                            (v.Description != null && v.Description.ToLower().Contains(query)) ||
+                            (v.UploadedByUser != null && v.UploadedByUser.Name.ToLower().Contains(query)))
+                .Select(v => new VideoDto
+                {
+                    Id = v.Id,
+                    Name = v.Name,
+                    Description = v.Description,
+                    PublishDate = v.PublishDate,
+                    Uri = v.Uri,
+                    UploadedByUserId = v.UploadedByUserId,
+                    UploadedByUserName = v.UploadedByUser != null ? v.UploadedByUser.Name : null,
+                    UploadedByUserProfilePictureUrl = v.UploadedByUser != null ? v.UploadedByUser.ProfilePictureUrl : null,
+                    LikesCount = v.Interactions.Count(i => i.Type == InteractionType.Like),
+                    FavoritesCount = v.Interactions.Count(i => i.Type == InteractionType.Favorite),
+                    ViewsCount = v.Interactions.Count(i => i.Type == InteractionType.View),
+                    CommentsCount = v.Comments.Count
+                });
+
+            // Get the result
+            var videos = await videosQuery.ToListAsync();
+
+            // If user is authenticated, add their interaction information
+            if (userId.HasValue)
+            {
+                // Get all interactions from the user for these videos
+                var videoIds = videos.Select(v => v.Id).ToList();
+                var userInteractions = await _context.VideoInteractions
+                    .Where(i => i.UserId == userId.Value && videoIds.Contains(i.VideoId))
+                    .Select(i => new { i.VideoId, i.Type })
+                    .ToListAsync();
+
+                // Group interactions by video
+                var interactionsByVideo = userInteractions
+                    .GroupBy(i => i.VideoId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(i => i.Type).ToList()
+                    );
+
+                // Set interaction flags for each video
+                foreach (var video in videos)
+                {
+                    if (interactionsByVideo.TryGetValue(video.Id, out var interactions))
+                    {
+                        video.UserHasLiked = interactions.Contains(InteractionType.Like);
+                        video.UserHasFavorited = interactions.Contains(InteractionType.Favorite);
+                        video.UserHasWatchLater = interactions.Contains(InteractionType.WatchLater);
+                        video.UserHasViewed = interactions.Contains(InteractionType.View);
+                    }
+                }
+            }
+
+            return videos;
+        }
+
         // GET: api/Videos/5
         [HttpGet("{id}")]
         public async Task<ActionResult<VideoDto>> GetVideo(long id)

@@ -302,6 +302,73 @@ namespace IA.FrontEnd.Services
             }
         }
 
+        // Búsqueda contextual de videos
+        public async Task<List<VideoDto>> SearchVideosWithContext(string query, string context = "all")
+        {
+            try
+            {
+                var token = await _authStateProvider.GetTokenAsync();
+                if (!string.IsNullOrEmpty(token))
+                {
+                    _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                }
+
+                // Si el contexto es 'all', usar la búsqueda estándar
+                if (context == "all")
+                {
+                    var encodedQuery = Uri.EscapeDataString(query);
+                    var videos = await _httpClient.GetFromJsonAsync<List<VideoDto>>($"{_apiBaseUrl}/api/videos/search?query={encodedQuery}");
+                    return videos ?? new List<VideoDto>();
+                }
+
+                // Para búsquedas contextuales, primero obtenemos los videos según el contexto
+                List<VideoDto> contextVideos = new List<VideoDto>();
+
+                switch (context.ToLower())
+                {
+                    case "myvideos":
+                        contextVideos = await GetMyVideos();
+                        break;
+                    case "history":
+                        contextVideos = await GetViewedVideos();
+                        break;
+                    case "liked":
+                        contextVideos = await GetLikedVideos();
+                        break;
+                    case "watchlater":
+                        contextVideos = await GetWatchLaterVideos();
+                        break;
+                    case "favorites":
+                        // Para favoritos, usamos el endpoint específico para favoritos
+                        contextVideos = await _httpClient.GetFromJsonAsync<List<VideoDto>>($"{_apiBaseUrl}/api/user-videos/favorites") ?? new List<VideoDto>();
+                        break;
+                    default:
+                        // Usar búsqueda general si el contexto no es reconocido
+                        var encodedQ = Uri.EscapeDataString(query);
+                        return await _httpClient.GetFromJsonAsync<List<VideoDto>>($"{_apiBaseUrl}/api/videos/search?query={encodedQ}") ?? new List<VideoDto>();
+                }
+
+                // Ahora filtramos los videos del contexto según la consulta de búsqueda
+                if (!string.IsNullOrWhiteSpace(query))
+                {
+                    query = query.ToLower();
+                    return contextVideos
+                        .Where(v =>
+                            v.Name.ToLower().Contains(query) ||
+                            (v.Description != null && v.Description.ToLower().Contains(query)) ||
+                            (v.UploadedByUserName != null && v.UploadedByUserName.ToLower().Contains(query)))
+                        .ToList();
+                }
+
+                return contextVideos;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error searching videos with context: {ex.Message}");
+                return new List<VideoDto>();
+            }
+        }
+
         // Limpiar historial de vistas
         public async Task<bool> ClearHistory()
         {

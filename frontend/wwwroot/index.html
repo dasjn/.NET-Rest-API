@@ -13,6 +13,13 @@
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
     <link href="css/RangeSlider.css" rel="stylesheet" />
+    <script>
+        // Prevenir el error de chrome creando el objeto antes de que se intente acceder
+        window.mudPointerEventsNone = {
+            cancelListener: function () { return true; },
+            disconnect: function () { return true; }
+        };
+    </script>
 </head>
 
 <body>
@@ -30,8 +37,8 @@
         <a class="dismiss">🗙</a>
     </div>
     <script src="_content/Microsoft.AspNetCore.Components.WebAssembly.Authentication/AuthenticationService.js"></script>
-    <script src="_framework/blazor.webassembly.js"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+    <script src="_framework/blazor.webassembly.js"></script>
     <script src="js/RangeSlider.js" defer></script>
 </body>
 

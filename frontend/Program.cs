@@ -1,5 +1,6 @@
 using IA.FrontEnd;
 using IA.FrontEnd.Auth;
+using IA.FrontEnd.Components;
 using IA.FrontEnd.PageModels.Layout;
 using IA.FrontEnd.Services;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -11,6 +12,19 @@ using MudBlazor.Services;
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
+
+// Servicios de MudBlazor
+builder.Services.AddMudServices(config =>
+{
+    config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.BottomRight;
+    config.SnackbarConfiguration.PreventDuplicates = true;
+    config.SnackbarConfiguration.NewestOnTop = true;
+    config.SnackbarConfiguration.ShowCloseIcon = true;
+    config.SnackbarConfiguration.VisibleStateDuration = 3000;
+    config.SnackbarConfiguration.HideTransitionDuration = 200;
+    config.SnackbarConfiguration.ShowTransitionDuration = 200;
+    config.SnackbarConfiguration.SnackbarVariant = Variant.Filled;
+});
 
 // Configuración
 builder.Services.AddSingleton(provider =>
@@ -35,19 +49,6 @@ builder.Services.AddScoped<VideoInteractionService>();
 
 // ViewModels
 builder.Services.AddSingleton<MainLayoutVM>();
-
-// Servicios de MudBlazor
-builder.Services.AddMudServices(config =>
-{
-    config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.BottomRight;
-    config.SnackbarConfiguration.PreventDuplicates = true;
-    config.SnackbarConfiguration.NewestOnTop = true;
-    config.SnackbarConfiguration.ShowCloseIcon = true;
-    config.SnackbarConfiguration.VisibleStateDuration = 3000;
-    config.SnackbarConfiguration.HideTransitionDuration = 200;
-    config.SnackbarConfiguration.ShowTransitionDuration = 200;
-    config.SnackbarConfiguration.SnackbarVariant = Variant.Filled;
-});
 
 await builder.Build().RunAsync();
 

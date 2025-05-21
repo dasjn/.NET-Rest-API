@@ -7,7 +7,7 @@
 <MudItem>
     @if (IsLoading)
     {
-        <MudSkeleton SkeletonType="SkeletonType.Circle" Width="50px" Height="50px" />
+        <MudSkeleton SkeletonType="SkeletonType.Circle" Width="40px" Height="40px" />
     }
 
     @if (!IsLoading && ImageAvailable)
@@ -15,7 +15,7 @@
         <MudImage ObjectFit="ObjectFit.Cover"
                   ObjectPosition="ObjectPosition.Center"
                   Src="@ImageUrl"
-                  Width="50" Height="50" Alt="User Avatar" Elevation="25"
+                  Width="@Size" Height="@Size" Alt="User Avatar" Elevation="25"
                   Class="rounded-circle" />
     }
     else if (!IsLoading && !ImageAvailable)
@@ -23,14 +23,14 @@
         <MudImage ObjectFit="ObjectFit.Contain"
                   ObjectPosition="ObjectPosition.Center"
                   Src="https://avatar.iran.liara.run/public/job/doctor/male"
-                  Width="50" Height="50" Alt="Fallback Avatar" Elevation="25"
+                  Width="@Size" Height="@Size" Alt="Fallback Avatar" Elevation="25"
                   Class="rounded-circle" />
     }
 </MudItem>
 
 @code {
     [Parameter] public string? CustomImageUrl { get; set; }
-    [Parameter] public int Size { get; set; } = 50;
+    [Parameter] public int Size { get; set; } = 40;
 
     private bool IsLoading = true;
     private bool ImageAvailable = false;
