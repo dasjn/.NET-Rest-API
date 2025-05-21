@@ -75,7 +75,8 @@ else
                        Title="@video.Name"
                        ChannelName="@video.UploadedByUserName"
                        Views="@video.ViewsCount"
-                       PublishedDate="@video.PublishDate.ToString("dd/MM/yyyy")" />
+                       PublishedDate="@video.PublishDate.ToString("dd/MM/yyyy")"
+                       ThumbnailUri="@video.ThumbnailUri" />
         }
     </MudGrid>
 }

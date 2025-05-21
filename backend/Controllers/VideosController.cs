@@ -21,15 +21,18 @@ namespace IA.WebAPI.Controllers
         private readonly IAContext _context;
         private readonly IFileStorageService _fileService;
         private readonly ILogger<VideosController> _logger;
+        private readonly IVideoProcessingService _videoProcessingService;
 
         public VideosController(
-            IAContext context,
-            IFileStorageService fileService,
-            ILogger<VideosController> logger)
+           IAContext context,
+           IFileStorageService fileService,
+           ILogger<VideosController> logger,
+           IVideoProcessingService videoProcessingService)
         {
             _context = context;
             _fileService = fileService;
             _logger = logger;
+            _videoProcessingService = videoProcessingService;
         }
 
         // GET: api/Videos
@@ -327,9 +330,13 @@ namespace IA.WebAPI.Controllers
         // POST: api/Videos
         [Authorize]
         [HttpPost]
-        [RequestSizeLimit(5368709120)] // 5GB en bytes
-        [RequestFormLimits(MultipartBodyLengthLimit = 5368709120)] // 5GB en bytes
-        public async Task<ActionResult<VideoDto>> PostVideo([FromForm] IFormFile videoFile, [FromForm] string name, [FromForm] string description)
+        [RequestSizeLimit(5368709120)] // 5GB in bytes
+        [RequestFormLimits(MultipartBodyLengthLimit = 5368709120)] // 5GB in bytes
+        public async Task<ActionResult<VideoDto>> PostVideo(
+            [FromForm] IFormFile videoFile,
+            [FromForm] string name,
+            [FromForm] string description,
+            [FromForm(Name = "thumbnailImage")] IFormFile? thumbnailFile = null)
         {
             try
             {
@@ -338,7 +345,7 @@ namespace IA.WebAPI.Controllers
                     return BadRequest("No video file uploaded");
                 }
 
-                // Verificar que es un archivo de video por su extensión
+                // Verify video file
                 string extension = Path.GetExtension(videoFile.FileName).ToLowerInvariant();
                 string[] allowedVideoExtensions = { ".mp4", ".mov", ".avi", ".wmv", ".mkv", ".webm", ".flv", ".m4v" };
 
@@ -347,40 +354,80 @@ namespace IA.WebAPI.Controllers
                     return BadRequest($"Invalid file type. Allowed video formats are: {string.Join(", ", allowedVideoExtensions)}");
                 }
 
-                // Obtener el ID del usuario actual
+                // Get the user ID
                 var userId = GetCurrentUserId();
                 if (!userId.HasValue)
                 {
-                    return Unauthorized("No se pudo identificar al usuario");
+                    return Unauthorized("Unable to identify the user");
                 }
 
-                // Obtener el nombre del usuario para incluirlo en la respuesta
+                // Get user name
                 var userName = await _context.Users
                     .Where(u => u.Id == userId.Value)
                     .Select(u => u.Name)
-                    .FirstOrDefaultAsync() ?? "Usuario";
+                    .FirstOrDefaultAsync() ?? "User";
 
-                // Guardar el archivo usando el servicio de almacenamiento
-                string relativePath = await _fileService.SaveFileAsync(videoFile, "Videos");
+                // Save the video file
+                string videoRelativePath = await _fileService.SaveFileAsync(videoFile, "Videos");
+                string videoPath = Path.Combine("Uploads", "Videos", Path.GetFileName(videoRelativePath));
 
-                // Mantener el formato de ruta original para compatibilidad
-                string originalStylePath = Path.Combine("Uploads", "Videos", Path.GetFileName(relativePath));
+                // Handle thumbnail
+                string? thumbnailPath = null;
 
-                // Crear un nuevo objeto Video
+                if (thumbnailFile != null && thumbnailFile.Length > 0)
+                {
+                    // Check thumbnail is an image
+                    string thumbExtension = Path.GetExtension(thumbnailFile.FileName).ToLowerInvariant();
+                    string[] allowedImageExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp" };
+
+                    if (!allowedImageExtensions.Contains(thumbExtension))
+                    {
+                        return BadRequest($"Invalid thumbnail format. Allowed formats are: {string.Join(", ", allowedImageExtensions)}");
+                    }
+
+                    // Save the thumbnail
+                    string thumbRelativePath = await _fileService.SaveFileAsync(thumbnailFile, "Thumbnails");
+                    thumbnailPath = Path.Combine("Uploads", "Thumbnails", Path.GetFileName(thumbRelativePath));
+                    _logger.LogInformation("Custom thumbnail saved: {ThumbnailPath}", thumbnailPath);
+                }
+                else if (_videoProcessingService != null)
+                {
+                    // Extract thumbnail from the first frame of the video
+                    try
+                    {
+                        thumbnailPath = await _videoProcessingService.ExtractThumbnailAsync(videoPath, 1);
+                        if (!string.IsNullOrEmpty(thumbnailPath))
+                        {
+                            _logger.LogInformation("Thumbnail extracted from video: {ThumbnailPath}", thumbnailPath);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Failed to extract thumbnail from video: {VideoPath}", videoPath);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error extracting thumbnail from video: {VideoPath}", videoPath);
+                        // Continue even if thumbnail extraction fails
+                    }
+                }
+
+                // Create video entity
                 var videoEntity = new Video
                 {
                     Name = name,
                     Description = description,
                     PublishDate = DateTime.UtcNow,
-                    Uri = originalStylePath, // Usamos el formato que espera el frontend
-                    UploadedByUserId = userId // Asignar el ID del usuario que sube el video
+                    Uri = videoPath,
+                    ThumbnailUri = thumbnailPath,
+                    UploadedByUserId = userId
                 };
 
-                // Guardar en la base de datos
+                // Save to database
                 _context.Videos.Add(videoEntity);
                 await _context.SaveChangesAsync();
 
-                // Retornar el video creado con formato DTO
+                // Return created entity as DTO
                 return CreatedAtAction(
                     nameof(GetVideo),
                     new { id = videoEntity.Id },
@@ -391,6 +438,7 @@ namespace IA.WebAPI.Controllers
                         Description = videoEntity.Description,
                         PublishDate = videoEntity.PublishDate,
                         Uri = videoEntity.Uri,
+                        ThumbnailUri = videoEntity.ThumbnailUri,
                         UploadedByUserId = userId,
                         UploadedByUserName = userName,
                         LikesCount = 0,
@@ -414,7 +462,6 @@ namespace IA.WebAPI.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, "Error uploading video file");
             }
         }
-
         // DELETE: api/Videos/5
         [Authorize]
         [HttpDelete("{id}")]

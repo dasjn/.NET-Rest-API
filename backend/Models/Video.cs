@@ -17,5 +17,6 @@
 
         // Relación con comentarios
         public virtual ICollection<VideoComment> Comments { get; set; } = new List<VideoComment>();
+        public string? ThumbnailUri { get; set; }
     }
 }

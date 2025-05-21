@@ -10,6 +10,7 @@
         public long? UploadedByUserId { get; set; }
         public string? UploadedByUserName { get; set; }
         public string? UploadedByUserProfilePictureUrl { get; set; }
+        public string? ThumbnailUri { get; set; }
 
         // Contadores de interacciones
         public int LikesCount { get; set; }

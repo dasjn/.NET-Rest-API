@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace IA.WebAPI.Models
 {
@@ -26,6 +27,8 @@ namespace IA.WebAPI.Models
                                .AddJsonFile("appsettings.json")
                                .Build();
                 optionsBuilder.UseSqlServer(configuration.GetConnectionString("DefaultConnection"));
+
+
             }
         }
 

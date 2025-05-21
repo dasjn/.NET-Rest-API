@@ -16,6 +16,7 @@ namespace IA.WebAPI.Models.DTOs
         public long? UploadedByUserId { get; set; }
         public string? UploadedByUserName { get; set; }
         public string? UploadedByUserProfilePictureUrl { get; set; }
+        public string? ThumbnailUri { get; set; }
 
         // Contadores de interacciones
         public int LikesCount { get; set; }
@@ -38,5 +39,6 @@ namespace IA.WebAPI.Models.DTOs
         public long Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
+        public string? ThumbnailUri { get; set; }
     }
 }

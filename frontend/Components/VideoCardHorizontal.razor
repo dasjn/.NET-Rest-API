@@ -1,5 +1,6 @@
 ﻿@using MudBlazor
 @using System
+@inject IConfiguration Configuration
 
 <MudItem xs="12" sm="12" md="12" Style="overflow: hidden;" Class="pb-3">
     <MudLink Href="@($"/video/{VideoId}")">
@@ -63,9 +64,27 @@
     [Parameter] public string ChannelName { get; set; } = string.Empty;
     [Parameter] public int Views { get; set; }
     [Parameter] public string PublishedDate { get; set; } = string.Empty;
+    [Parameter] public string? ThumbnailUri { get; set; }
+
+    private string ApiBaseUrl => Configuration["ApiBaseUrl"] ?? "https://localhost:7113";
 
     private string GetVideoThumbnail()
     {
-        return "https://picsum.photos/400/225?random=" + VideoId;
+        // If we have a thumbnail URI, use it
+        if (!string.IsNullOrEmpty(ThumbnailUri))
+        {
+            return FormatUri(ThumbnailUri);
+        }
+
+        // Otherwise use a placeholder
+        return $"https://picsum.photos/400/225?random={VideoId}";
+    }
+
+    private string FormatUri(string uri)
+    {
+        if (uri.StartsWith("http"))
+            return uri;
+
+        return $"{ApiBaseUrl}/{uri.Replace("\\", "/")}";
     }
 }
