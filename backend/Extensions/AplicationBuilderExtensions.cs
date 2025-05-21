@@ -49,12 +49,12 @@ namespace IA.WebAPI.Extensions
             // Configurar Swagger solo en entorno de desarrollo
             if (app.Environment.IsDevelopment())
             {
-                //app.UseSwagger();
-                //app.UseSwaggerUI(c =>
-                //{
-                //    c.SwaggerEndpoint("/swagger/v1/swagger.json", "IA API v1");
-                //    c.RoutePrefix = "swagger"; // Mantener la ruta estándar de Swagger
-                //});
+                app.UseSwagger();
+                app.UseSwaggerUI(c =>
+                {
+                    c.SwaggerEndpoint("/swagger/v1/swagger.json", "IA API v1");
+                    c.RoutePrefix = "swagger"; // Mantener la ruta estándar de Swagger
+                });
             }
 
             // Configurar archivos estáticos

@@ -4,7 +4,6 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using IA.FrontEnd.Models;
-using Microsoft.AspNetCore.Components.Forms;
 
 namespace IA.FrontEnd.Services
 {
@@ -33,33 +32,32 @@ namespace IA.FrontEnd.Services
             string fileName,
             string title,
             string description,
-            string? contentType = null,
-            IBrowserFile? thumbnailFile = null)
+            string? contentType = null)
         {
             try
             {
-                // Validations
+                // Validaciones
                 if (videoData == null || videoData.Length == 0)
                     return (false, null, "No video data to upload.");
 
                 if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(description))
                     return (false, null, "Video must have a title and description.");
 
-                // Get token
+                // Obtener token
                 var token = await _authStateProvider.GetTokenAsync();
                 if (string.IsNullOrEmpty(token))
                     return (false, null, "Authentication token is missing.");
 
-                // Configure client with token
+                // Configurar cliente con token
                 _httpClient.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", token);
 
-                // Prepare multipart content
+                // Preparar contenido multipart
                 using var content = new MultipartFormDataContent();
                 using var stream = new MemoryStream(videoData);
                 using var fileContent = new StreamContent(stream);
 
-                // Set content type
+                // Establecer tipo de contenido
                 fileContent.Headers.ContentType = new MediaTypeHeaderValue(
                     contentType ?? "application/octet-stream");
 
@@ -67,22 +65,10 @@ namespace IA.FrontEnd.Services
                 content.Add(new StringContent(title, Encoding.UTF8, "text/plain"), "name");
                 content.Add(new StringContent(description, Encoding.UTF8, "text/plain"), "description");
 
-                // Add thumbnail if provided
-                if (thumbnailFile != null)
-                {
-                    using var thumbStream = thumbnailFile.OpenReadStream(4 * 1024 * 1024); // 4MB max
-                    var thumbBytes = new byte[thumbnailFile.Size];
-                    await thumbStream.ReadAsync(thumbBytes);
-
-                    using var thumbContent = new StreamContent(new MemoryStream(thumbBytes));
-                    thumbContent.Headers.ContentType = new MediaTypeHeaderValue(thumbnailFile.ContentType);
-                    content.Add(thumbContent, "thumbnailFile", thumbnailFile.Name);
-                }
-
-                // Make request
+                // Realizar solicitud
                 var response = await _httpClient.PostAsync(_videosApiEndpoint, content);
 
-                // Handle response
+                // Manejar respuesta
                 if (response.IsSuccessStatusCode)
                 {
                     var videoEntity = await response.Content.ReadFromJsonAsync<Video>();

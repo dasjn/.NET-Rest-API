@@ -110,8 +110,6 @@ namespace IA.WebAPI.Extensions
             // Agregar servicio de almacenamiento de archivos
             services.AddScoped<IFileStorageService, FileStorageService>();
 
-            services.AddScoped<IVideoProcessingService, VideoProcessingService>();
-
             return services;
         }
 
