@@ -110,6 +110,8 @@ namespace IA.WebAPI.Extensions
             // Agregar servicio de almacenamiento de archivos
             services.AddScoped<IFileStorageService, FileStorageService>();
 
+            services.AddScoped<IThumbnailGeneratorService, ThumbnailGeneratorService>();
+
             return services;
         }
 
@@ -209,8 +211,7 @@ namespace IA.WebAPI.Extensions
                     c.IncludeXmlComments(xmlPath);
                 }
 
-                // Filtro para manejar archivos en Swagger
-                c.OperationFilter<SwaggerFileOperationFilter>();
+                // ELIMINADO: c.OperationFilter<SwaggerFileOperationFilter>();
                 // Filtro de esquema personalizado para mejorar la documentación
                 c.SchemaFilter<SwaggerSchemaFilter>();
             });

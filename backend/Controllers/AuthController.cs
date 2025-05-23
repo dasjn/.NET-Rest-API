@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using System.Web;
+using IA.WebAPI.Models;
 using IA.WebAPI.Models.Auth;
 using IA.WebAPI.Options;
 using IA.WebAPI.Services;
@@ -14,6 +15,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
 
 namespace IA.WebAPI.Controllers
 {
@@ -30,6 +32,7 @@ namespace IA.WebAPI.Controllers
         private readonly IOAuthStateService _stateService;
         private readonly AuthOptions _authOptions;
         private readonly ILogger<AuthController> _logger;
+        private readonly IAContext _context;
 
         /// <summary>
         /// Constructor del controlador de autenticación
@@ -39,13 +42,15 @@ namespace IA.WebAPI.Controllers
             IGoogleAuthService googleAuthService,
             IOAuthStateService stateService,
             IOptions<AuthOptions> authOptions,
-            ILogger<AuthController> logger)
+            ILogger<AuthController> logger,
+            IAContext context)
         {
             _authService = authService ?? throw new ArgumentNullException(nameof(authService));
             _googleAuthService = googleAuthService ?? throw new ArgumentNullException(nameof(googleAuthService));
             _stateService = stateService ?? throw new ArgumentNullException(nameof(stateService));
             _authOptions = authOptions.Value ?? throw new ArgumentNullException(nameof(authOptions));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _context = context;
         }
 
         /// <summary>
@@ -203,6 +208,82 @@ namespace IA.WebAPI.Controllers
                 ProfilePictureUrl = User.FindFirst("ProfilePictureUrl")?.Value
             });
         }
+
+
+#if DEBUG
+        /// <summary>
+        /// ENDPOINT TEMPORAL SOLO PARA TESTING - TO DO: ELIMINAR EN PRODUCCIÓN
+        /// Genera un token JWT sin autenticación OAuth
+        /// </summary>
+        /// <param name="email">Email del usuario de prueba</param>
+        /// <returns>Token JWT</returns>
+        [HttpPost("test-login")]
+        [ApiExplorerSettings(IgnoreApi = false)] // Para que aparezca en Swagger
+        [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+        public async Task<ActionResult<string>> TestLogin([FromBody] string email)
+        {
+            try
+            {
+                // Validar email básico
+                if (string.IsNullOrEmpty(email) || !email.Contains("@"))
+                {
+                    return BadRequest("Please provide a valid email");
+                }
+
+                // Buscar o crear usuario de prueba
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+                if (user == null)
+                {
+                    user = new User
+                    {
+                        ExternalId = Guid.NewGuid().ToString(),
+                        Email = email,
+                        Name = "Test User",
+                        RegisteredDate = DateTime.UtcNow,
+                        LastLoginDate = DateTime.UtcNow
+                    };
+                    _context.Users.Add(user);
+                    await _context.SaveChangesAsync();
+
+                    _logger.LogInformation("Created test user: {Email} with ID: {Id}", email, user.Id);
+                }
+                else
+                {
+                    // Actualizar última fecha de login
+                    user.LastLoginDate = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+
+                    _logger.LogInformation("Using existing test user: {Email} with ID: {Id}", email, user.Id);
+                }
+
+                var userInfo = new UserInfoModel
+                {
+                    UserId = user.ExternalId,
+                    Email = user.Email,
+                    Name = user.Name,
+                    InternalId = user.Id.ToString(),
+                    ProfilePictureUrl = "https://avatar.iran.liara.run/public/job/doctor/male" // Avatar por defecto
+                };
+
+                var token = _authService.GenerateJwtToken(userInfo);
+
+                _logger.LogInformation("Generated test token for user: {Email}", email);
+
+                return Ok(new
+                {
+                    token = token,
+                    message = "Test token generated successfully",
+                    user = userInfo
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating test token for email: {Email}", email);
+                return StatusCode(500, "Error generating test token");
+            }
+        }
+#endif
+
 
         /// <summary>
         /// Proporciona información de diagnóstico para depuración

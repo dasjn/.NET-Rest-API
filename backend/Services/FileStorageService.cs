@@ -10,6 +10,7 @@ namespace IA.WebAPI.Services
         Task<bool> DeleteFileAsync(string filePath);
         string GetFileUrl(string fileName);
         Task<byte[]> GetFileAsync(string filePath);
+        string GetUploadsBaseDirectory();
     }
 
     public class FileStorageService : IFileStorageService
@@ -22,7 +23,7 @@ namespace IA.WebAPI.Services
         // Lista de extensiones permitidas incluyendo videos
         private readonly string[] _allowedExtensions = { 
             // Imágenes
-            ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", 
+            ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp",
             // Documentos
             ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", 
             // Videos
@@ -50,6 +51,21 @@ namespace IA.WebAPI.Services
             { ".m4v", "video/x-m4v" }
         };
 
+        // Tamaño máximo para imágenes/thumbnails: 5MB
+        private readonly long _imageMaxFileSize = 5 * 1024 * 1024; // 5MB
+
+        // Mapeo de extensiones a tipos MIME para imágenes
+        private readonly Dictionary<string, string> _imageContentTypes = new()
+        {
+            { ".jpg", "image/jpeg" },
+            { ".jpeg", "image/jpeg" },
+            { ".png", "image/png" },
+            { ".gif", "image/gif" },
+            { ".bmp", "image/bmp" },
+            { ".webp", "image/webp" },
+            { ".svg", "image/svg+xml" }
+        };
+
         public FileStorageService(
             IWebHostEnvironment environment,
             IConfiguration configuration,
@@ -67,6 +83,11 @@ namespace IA.WebAPI.Services
             {
                 Directory.CreateDirectory(_uploadsBaseDirectory);
             }
+        }
+
+        public string GetUploadsBaseDirectory()
+        {
+            return _uploadsBaseDirectory;
         }
 
         public async Task<string> SaveFileAsync(IFormFile file, string subDirectory = "")
@@ -180,24 +201,24 @@ namespace IA.WebAPI.Services
             {
                 maxSizeForType = _videoMaxFileSize;
             }
+            // Para imágenes, aplicar límite de 5MB
+            else if (_imageContentTypes.ContainsKey(extension))
+            {
+                maxSizeForType = _imageMaxFileSize;
+            }
             else if (extension.StartsWith(".doc") || extension.StartsWith(".xls") || extension.StartsWith(".ppt"))
             {
                 // Límite para documentos de Office (20MB)
                 maxSizeForType = 20 * 1024 * 1024;
             }
-            else if (extension.StartsWith(".jpg") || extension.StartsWith(".png") || extension.StartsWith(".gif"))
-            {
-                // Límite para imágenes (10MB)
-                maxSizeForType = 10 * 1024 * 1024;
-            }
 
             if (file.Length > maxSizeForType)
             {
-                string sizeInGB = maxSizeForType >= 1024 * 1024 * 1024
+                string sizeDisplay = maxSizeForType >= 1024 * 1024 * 1024
                     ? $"{maxSizeForType / (1024.0 * 1024 * 1024):F2}GB"
                     : $"{maxSizeForType / (1024.0 * 1024):F2}MB";
 
-                throw new ArgumentException($"File exceeds maximum allowed size ({sizeInGB}) for file type {extension}");
+                throw new ArgumentException($"File exceeds maximum allowed size ({sizeDisplay}) for file type {extension}");
             }
 
             // Validar nombre de archivo
@@ -206,7 +227,6 @@ namespace IA.WebAPI.Services
                 throw new ArgumentException("Invalid file name");
             }
         }
-
         private string GetSafeFileName(string fileName)
         {
             // Eliminar caracteres inválidos y limitar longitud
@@ -238,5 +258,7 @@ namespace IA.WebAPI.Services
             // Limpiar caracteres especiales excepto / para subdirectorios
             return Regex.Replace(filePath, @"[^\w\d\._/-]", "_");
         }
+
+        
     }
 }
