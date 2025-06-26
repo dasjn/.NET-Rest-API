@@ -7,6 +7,7 @@
         public string? Description { get; set; }
         public DateTime PublishDate { get; set; }
         public string Uri { get; set; } = string.Empty;
+        public string? ThumbnailUri { get; set; }
         public long? UploadedByUserId { get; set; }
         public string? UploadedByUserName { get; set; }
         public string? UploadedByUserProfilePictureUrl { get; set; }

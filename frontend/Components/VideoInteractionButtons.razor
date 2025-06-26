@@ -2,17 +2,39 @@
 @using Microsoft.AspNetCore.Components.Rendering
 
 <MudPaper Class="pa-3 mb-4" Elevation="0">
-    <MudStack Row="true" Justify="Justify.SpaceBetween">
-        <MudStack Row="true">
-            <LikeButton IsLiked="IsLiked" Count="LikesCount" OnClick="HandleLikeClick" />
-            <FavoriteButton IsFavorite="IsFavorite" Count="FavoritesCount" OnClick="HandleFavoriteClick" />
+    
+    <!-- Layout para Desktop/Tablet -->
+    <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="false">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudStack Row="true" Spacing="2">
+                <LikeButton IsLiked="IsLiked" Count="LikesCount" OnClick="HandleLikeClick" />
+                <FavoriteButton IsFavorite="IsFavorite" Count="FavoritesCount" OnClick="HandleFavoriteClick" />
+            </MudStack>
+            
+            <MudStack Row="true" Spacing="2">
+                <WatchLaterButton IsInWatchLater="IsInWatchLater" OnClick="HandleWatchLaterClick" />
+                <ViewsCounter Count="ViewsCount" />
+            </MudStack>
         </MudStack>
-        
-        <MudStack Row="true">
-            <WatchLaterButton IsInWatchLater="IsInWatchLater" OnClick="HandleWatchLaterClick" />
-            <ViewsCounter Count="ViewsCount" />
+    </MudHidden>
+
+    <!-- Layout para Mobile -->
+    <MudHidden Breakpoint="Breakpoint.MdAndUp" Invert="false">
+        <MudStack Spacing="2">
+            <!-- Primera fila: Like y Favorite -->
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <LikeButton IsLiked="IsLiked" Count="LikesCount" OnClick="HandleLikeClick" />
+                <WatchLaterButton IsInWatchLater="IsInWatchLater" OnClick="HandleWatchLaterClick" />
+            </MudStack>
+            
+            <!-- Segunda fila: Watch Later y Views -->
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <ViewsCounter Count="ViewsCount" />
+                <FavoriteButton IsFavorite="IsFavorite" Count="FavoritesCount" OnClick="HandleFavoriteClick" />
+            </MudStack>
         </MudStack>
-    </MudStack>
+    </MudHidden>
+
 </MudPaper>
 
 @code {

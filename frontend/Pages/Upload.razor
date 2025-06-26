@@ -19,6 +19,9 @@
 {
     <MudStack Style="width: 100%">
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-7" />
+        <MudText Typo="Typo.body1" Align="Align.Center">
+            @(_videoWasProcessed ? "Uploading processed video..." : "Processing and uploading video...")
+        </MudText>
     </MudStack>
 }
 else
@@ -69,6 +72,70 @@ else
                 Clear
             </MudButton>
         </MudToolBar>
+
+        <!-- Thumbnail Upload Section -->
+        <MudStack Style="width: 100%" Class="mt-4">
+            <MudText Typo="Typo.h6">Thumbnail (optional)</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Upload a custom thumbnail or one will be generated automatically from your video
+            </MudText>
+            <MudFileUpload T="IReadOnlyList<IBrowserFile>"
+                           @ref="_thumbnailUploader"
+                           OnFilesChanged="HandleThumbnailSelection"
+                           Hidden="false"
+                           InputClass="absolute mud-width-full mud-height-full overflow-hidden z-10"
+                           InputStyle="opacity:0"
+                           MaximumFileCount="1"
+                           Accept="@ACCEPTED_IMAGE_EXTENSIONS"
+                           @ondrop="@ResetDragThumbnailClass"
+                           @ondragenter="@SetDragThumbnailClass"
+                           @ondragleave="@ResetDragThumbnailClass"
+                           @ondragend="@ResetDragThumbnailClass"
+                           tabindex="-1">
+                <ActivatorContent>
+                    <MudPaper Outlined="true"
+                              Class="@_dragAreaThumbnailClass">
+                        @if (!string.IsNullOrEmpty(_thumbnailPreviewUrl))
+                        {
+                            <div style="display: flex; flex-direction: column; align-items: center; padding: 16px;">
+                                <MudImage Src="@_thumbnailPreviewUrl"
+                                          Alt="Thumbnail preview"
+                                          Width="200"
+                                          Height="112"
+                                          ObjectFit="ObjectFit.Cover"
+                                          Class="rounded mb-2" />
+                                <MudText Typo="Typo.body2">Click to change thumbnail</MudText>
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="padding: 32px; text-align: center;">
+                                <MudText Typo="Typo.body1">
+                                    Arrastra y suelta una imagen aquí o haz clic para seleccionar (@ACCEPTED_IMAGE_EXTENSIONS)
+                                </MudText>
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(_selectedThumbnailFileName))
+                        {
+                            <MudChip T="string" Color="Color.Success" Text="@_selectedThumbnailFileName" Class="mt-2" />
+                        }
+                    </MudPaper>
+                </ActivatorContent>
+            </MudFileUpload>
+            <MudToolBar Gutters="false" Class="relative d-flex justify-end gap-4">
+                <MudButton Color="Color.Primary"
+                           OnClick="OpenThumbnailPicker"
+                           Variant="Variant.Filled">
+                    Open thumbnail picker
+                </MudButton>
+                <MudButton Color="Color.Error"
+                           Disabled="@string.IsNullOrEmpty(_selectedThumbnailFileName)"
+                           OnClick="ClearThumbnailSelection"
+                           Variant="Variant.Filled">
+                    Clear
+                </MudButton>
+            </MudToolBar>
+        </MudStack>
     </MudStack>
 
     <MudStack Class="@GetVideoVisibilityClass()" Style="@GetVideoResponsiveStyles()">
@@ -110,19 +177,28 @@ else
 
 @code {
     #region Constants
-    private const string DEFAULT_DRAG_CLASS = "relative rounded-lg border-2 border-full pa-4 mt-4 mud-width-full mud-height-full";
+    private const string DEFAULT_DRAG_CLASS = "relative rounded-lg border-2 border-dashed pa-4 mt-4 mud-width-full mud-height-full cursor-pointer transition-all";
     private const int DEFAULT_DURATION = 500;
     private const int MAX_FILE_SIZE_BYTES = 1073741824; // 1GB
     private const string ACCEPTED_VIDEO_EXTENSIONS = ".mp4, .avi, .mkv, .mov, .flv, .wmv";
+    private const string ACCEPTED_IMAGE_EXTENSIONS = ".jpg, .jpeg, .png, .gif, .webp";
     private const string API_BASE_URL = "https://localhost:7113";
     private const string VIDEOS_API_ENDPOINT = "/api/Videos";
     #endregion
 
     #region Private Fields
     private string _dragAreaClass = DEFAULT_DRAG_CLASS;
+    private string _dragAreaThumbnailClass = DEFAULT_DRAG_CLASS;
     private MudFileUpload<IReadOnlyList<IBrowserFile>>? _fileUploader;
+    private MudFileUpload<IReadOnlyList<IBrowserFile>>? _thumbnailUploader;
     private string? _selectedFileName;
     private IBrowserFile? _selectedFile;
+
+    // Thumbnail fields
+    private IBrowserFile? _selectedThumbnailFile;
+    private string? _selectedThumbnailFileName;
+    private string _thumbnailPreviewUrl = string.Empty;
+    private byte[]? _thumbnailData; // ← CAMPO AGREGADO
 
     private FFMPEG? _ffmpegInstance;
     private byte[]? _videoData;
@@ -161,6 +237,14 @@ else
         "video/quicktime",
         "video/x-matroska"
     };
+
+    private List<string> AllowedImageMimeTypes => new() {
+        "image/jpeg",
+        "image/jpg",
+        "image/png",
+        "image/gif",
+        "image/webp"
+    };
     #endregion
 
     #region Lifecycle Methods
@@ -190,6 +274,11 @@ else
         {
             JSRuntime.InvokeVoidAsync("URL.revokeObjectURL", _processedVideoUrl);
         }
+
+        if (!string.IsNullOrEmpty(_thumbnailPreviewUrl))
+        {
+            JSRuntime.InvokeVoidAsync("URL.revokeObjectURL", _thumbnailPreviewUrl);
+        }
     }
     #endregion
 
@@ -209,6 +298,12 @@ else
     private void ResetDragClass() =>
         _dragAreaClass = DEFAULT_DRAG_CLASS;
 
+    private void SetDragThumbnailClass() =>
+        _dragAreaThumbnailClass = $"{DEFAULT_DRAG_CLASS} mud-border-primary";
+
+    private void ResetDragThumbnailClass() =>
+        _dragAreaThumbnailClass = DEFAULT_DRAG_CLASS;
+
     private string FormatTime(int totalSeconds)
     {
         TimeSpan time = TimeSpan.FromSeconds(totalSeconds);
@@ -219,6 +314,9 @@ else
     #region File Handling Methods
     private Task OpenFilePicker() =>
         _fileUploader?.OpenFilePickerAsync() ?? Task.CompletedTask;
+
+    private Task OpenThumbnailPicker() =>
+        _thumbnailUploader?.OpenFilePickerAsync() ?? Task.CompletedTask;
 
     private async Task ClearSelection()
     {
@@ -237,6 +335,24 @@ else
 
         await JSRuntime.InvokeVoidAsync("eval", "document.querySelector('input[type=file]').value = ''");
         ResetDragClass();
+        StateHasChanged();
+    }
+
+    private async Task ClearThumbnailSelection()
+    {
+        await (_thumbnailUploader?.ClearAsync() ?? Task.CompletedTask);
+
+        _selectedThumbnailFileName = string.Empty;
+        _selectedThumbnailFile = null;
+        _thumbnailData = null; // ← LÍNEA AGREGADA
+
+        if (!string.IsNullOrEmpty(_thumbnailPreviewUrl))
+        {
+            await JSRuntime.InvokeVoidAsync("URL.revokeObjectURL", _thumbnailPreviewUrl);
+            _thumbnailPreviewUrl = string.Empty;
+        }
+
+        ResetDragThumbnailClass();
         StateHasChanged();
     }
 
@@ -283,6 +399,84 @@ else
     }
     #endregion
 
+    #region Thumbnail Handling Methods
+    private async void HandleThumbnailSelection(InputFileChangeEventArgs e)
+    {
+        ResetDragThumbnailClass();
+
+        try
+        {
+            AppendToLog("🖼️ DEBUG: HandleThumbnailSelection started");
+
+            var file = e.File;
+            AppendToLog($"🖼️ DEBUG: File selected - Name: {file.Name}, Size: {file.Size}, ContentType: {file.ContentType}");
+
+            // Validar tipo de archivo
+            if (!AllowedImageMimeTypes.Contains(file.ContentType))
+            {
+                AppendToLog($"❌ DEBUG: Invalid content type: {file.ContentType}");
+                Snackbar.Add("❌ Tipo de archivo inválido. Por favor sube una imagen.", Severity.Error);
+                return;
+            }
+
+            // Validar tamaño (máximo 5MB para imágenes)
+            if (file.Size > 5 * 1024 * 1024)
+            {
+                AppendToLog($"❌ DEBUG: File too large: {file.Size} bytes");
+                Snackbar.Add("❌ La imagen excede el tamaño máximo de 5MB.", Severity.Error);
+                return;
+            }
+
+            _selectedThumbnailFile = file;
+            _selectedThumbnailFileName = file.Name;
+            AppendToLog($"🖼️ DEBUG: File assigned to _selectedThumbnailFile and _selectedThumbnailFileName");
+
+            // Leer archivo para preview y upload
+            AppendToLog("🖼️ DEBUG: Starting to read file stream");
+            using var stream = file.OpenReadStream(5 * 1024 * 1024);
+            _thumbnailData = new byte[file.Size];
+            var bytesRead = await stream.ReadAsync(_thumbnailData);
+            AppendToLog($"🖼️ DEBUG: Read {bytesRead} bytes into _thumbnailData (expected: {file.Size})");
+
+            // Verificar que _thumbnailData no sea null y tenga datos
+            if (_thumbnailData == null)
+            {
+                AppendToLog("❌ DEBUG: _thumbnailData is null after reading!");
+                return;
+            }
+
+            if (_thumbnailData.Length == 0)
+            {
+                AppendToLog("❌ DEBUG: _thumbnailData is empty after reading!");
+                return;
+            }
+
+            AppendToLog($"🖼️ DEBUG: _thumbnailData successfully populated with {_thumbnailData.Length} bytes");
+
+            // Limpiar URL anterior si existe
+            if (!string.IsNullOrEmpty(_thumbnailPreviewUrl))
+            {
+                await JSRuntime.InvokeVoidAsync("URL.revokeObjectURL", _thumbnailPreviewUrl);
+                AppendToLog("🖼️ DEBUG: Cleaned up previous preview URL");
+            }
+
+            // Crear preview URL
+            _thumbnailPreviewUrl = FFmpegFactory.CreateURLFromBuffer(_thumbnailData, file.Name, file.ContentType);
+            AppendToLog($"🖼️ DEBUG: Created preview URL: {_thumbnailPreviewUrl}");
+
+            AppendToLog("🖼️ Thumbnail loaded successfully");
+            Snackbar.Add("✅ Thumbnail uploaded successfully", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            AppendToLog($"❌ Error processing thumbnail: {ex.Message}");
+            AppendToLog($"❌ Stack trace: {ex.StackTrace}");
+            Snackbar.Add($"❌ Error processing thumbnail: {ex.Message}", Severity.Error);
+        }
+    }
+    #endregion
+
     #region Video Processing Methods
     [JSInvokable]
     public async Task SetVideoDuration(double duration)
@@ -313,6 +507,9 @@ else
         {
             bool needsTrimming = _startTimeCut != _startTimeMin || _endTimeCut != _videoDurationInSeconds;
             _isUploading = true;
+
+            // DEBUG: Verificar estado del thumbnail antes del upload
+            DebugUploadState();
 
             if (needsTrimming)
             {
@@ -416,34 +613,89 @@ else
             byte[]? dataToUpload = _videoWasProcessed ? _processedVideoData : _videoData;
             string? fileNameToUpload = _videoWasProcessed ? _outputFileName : _inputFileName;
 
-            // Usar el nuevo servicio de video
+            if (dataToUpload == null)
+            {
+                AppendToLog("❌ No video data to upload");
+                return;
+            }
+
+            AppendToLog("📤 Uploading video to server...");
+
+            // Prepare thumbnail data if available - DEBUGGING
+            byte[]? thumbnailDataToUpload = _thumbnailData;
+            string? thumbnailFileNameToUpload = _selectedThumbnailFileName;
+            string? thumbnailContentType = _selectedThumbnailFile?.ContentType;
+
+            // DEBUG: Log thumbnail information
+            if (thumbnailDataToUpload != null)
+            {
+                AppendToLog($"🖼️ DEBUG: Thumbnail data available - Size: {thumbnailDataToUpload.Length} bytes");
+                AppendToLog($"🖼️ DEBUG: Thumbnail filename: {thumbnailFileNameToUpload}");
+                AppendToLog($"🖼️ DEBUG: Thumbnail content type: {thumbnailContentType}");
+            }
+            else
+            {
+                AppendToLog("🖼️ DEBUG: No thumbnail data - will use auto-generated thumbnail");
+            }
+
+            // Usar el nuevo servicio de video CON los parámetros del thumbnail
             var (success, videoEntity, errorMessage) = await VideoService.UploadVideoAsync(
                 dataToUpload,
                 fileNameToUpload,
                 _videoTitle,
                 _videoDescription,
-                _fileContentType
+                _fileContentType,
+                thumbnailDataToUpload,        // ← PARÁMETRO AGREGADO
+                thumbnailFileNameToUpload,    // ← PARÁMETRO AGREGADO
+                thumbnailContentType          // ← PARÁMETRO AGREGADO
             );
 
             if (success && videoEntity != null)
             {
-                Snackbar.Add($"✅ Video {(_videoWasProcessed ? "trimmed and " : "")}uploaded successfully.", Severity.Success);
+                string processText = _videoWasProcessed ? "trimmed and " : "";
+                string thumbnailText = _thumbnailData != null ? "with custom thumbnail " : "";
 
-                // Formatear la URL del video
-                string videoUri = VideoService.FormatVideoUrl(videoEntity.Uri);
+                AppendToLog($"✅ Video {processText}uploaded successfully {thumbnailText}(ID: {videoEntity.Id})");
 
-                // Navegar a la página del video
+                // DEBUG: Log the returned video entity
+                AppendToLog($"📊 DEBUG: Returned video ThumbnailUri: {videoEntity.ThumbnailUri}");
+
+                Snackbar.Add($"✅ Video {processText}uploaded successfully!", Severity.Success);
+
+                // Navigate to the video page
                 Navigation.NavigateTo($"/video/{videoEntity.Id}");
             }
             else
             {
+                AppendToLog($"❌ Upload failed: {errorMessage}");
                 Snackbar.Add($"❌ {errorMessage}", Severity.Error);
             }
         }
         catch (Exception ex)
         {
+            AppendToLog($"❌ Upload failed with exception: {ex.Message}");
+            AppendToLog($"❌ Stack trace: {ex.StackTrace}");
             Snackbar.Add($"❌ Upload failed: {ex.Message}", Severity.Error);
         }
+    }
+    #endregion
+
+    #region Debug Methods
+    private void DebugUploadState()
+    {
+        AppendToLog("=== DEBUG STATE CHECK ===");
+        AppendToLog($"_selectedThumbnailFile: {(_selectedThumbnailFile != null ? "Not null" : "NULL")}");
+        AppendToLog($"_selectedThumbnailFileName: {_selectedThumbnailFileName ?? "NULL"}");
+        AppendToLog($"_thumbnailData: {(_thumbnailData != null ? $"Not null ({_thumbnailData.Length} bytes)" : "NULL")}");
+        AppendToLog($"_thumbnailPreviewUrl: {(!string.IsNullOrEmpty(_thumbnailPreviewUrl) ? "Has value" : "NULL/Empty")}");
+
+        if (_selectedThumbnailFile != null)
+        {
+            AppendToLog($"_selectedThumbnailFile.Name: {_selectedThumbnailFile.Name}");
+            AppendToLog($"_selectedThumbnailFile.ContentType: {_selectedThumbnailFile.ContentType}");
+            AppendToLog($"_selectedThumbnailFile.Size: {_selectedThumbnailFile.Size}");
+        }
+        AppendToLog("=== END DEBUG STATE ===");
     }
     #endregion
 
@@ -456,7 +708,7 @@ else
 
     private void AppendToLog(string message)
     {
-        _logMessages += $"{message}\r\n";
+        _logMessages += $"{DateTime.Now:HH:mm:ss} {message}\r\n";
         StateHasChanged();
     }
     #endregion

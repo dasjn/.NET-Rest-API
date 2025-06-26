@@ -8,6 +8,7 @@ namespace IA.FrontEnd.Models
         public required string Name { get; set; }
         public string? Description { get; set; }
         public DateTime PublishDate { get; set; }
-        public required String Uri { get; set; }
+        public required string Uri { get; set; }
+        public string? ThumbnailUri { get; set; }
     }
 }

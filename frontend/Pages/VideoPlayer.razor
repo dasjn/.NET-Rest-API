@@ -125,7 +125,8 @@
                                          Title="@video.Name"
                                          ChannelName="@video.UploadedByUserName"
                                          Views="@video.ViewsCount"
-                                         PublishedDate="@video.PublishDate.ToString("dd/MM/yyyy")" />
+                                         ThumbnailUri="@video.ThumbnailUri"
+                                         PublishedDate="@video.PublishDate" />
                 }
             </MudStack>
         }
@@ -216,10 +217,14 @@
         isRelatedVideosLoading = true;
         try
         {
-            // En una implementación real, habría un endpoint específico para videos relacionados
+            // To do: En una implementación real, habría un endpoint específico para videos relacionados
             // Por ahora, simplemente obtenemos algunos videos y filtramos el actual
             var allVideos = await InteractionService.GetAllVideos();
-            relatedVideos = allVideos?.Where(v => v.Id != VideoId).Take(10).ToList() ?? new List<VideoDto>();
+            relatedVideos = allVideos?
+                .Where(v => v.Id != VideoId)
+                .OrderBy(x => Guid.NewGuid())  // ← LÍNEA AGREGADA para randomizar
+                .Take(10)
+                .ToList() ?? new List<VideoDto>();
         }
         catch
         {

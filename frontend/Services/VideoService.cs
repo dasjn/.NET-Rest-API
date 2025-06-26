@@ -32,10 +32,19 @@ namespace IA.FrontEnd.Services
             string fileName,
             string title,
             string description,
-            string? contentType = null)
+            string? contentType = null,
+            byte[]? thumbnailData = null,
+            string? thumbnailFileName = null,
+            string? thumbnailContentType = null)
         {
             try
             {
+                // DEBUG: Log what we received
+                Console.WriteLine($"🔍 DEBUG VideoService: Video data size: {videoData?.Length ?? 0} bytes");
+                Console.WriteLine($"🔍 DEBUG VideoService: Thumbnail data size: {thumbnailData?.Length ?? 0} bytes");
+                Console.WriteLine($"🔍 DEBUG VideoService: Thumbnail filename: {thumbnailFileName ?? "null"}");
+                Console.WriteLine($"🔍 DEBUG VideoService: Thumbnail content type: {thumbnailContentType ?? "null"}");
+
                 // Validaciones
                 if (videoData == null || videoData.Length == 0)
                     return (false, null, "No video data to upload.");
@@ -52,36 +61,71 @@ namespace IA.FrontEnd.Services
                 _httpClient.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", token);
 
-                // Preparar contenido multipart
-                using var content = new MultipartFormDataContent();
-                using var stream = new MemoryStream(videoData);
-                using var fileContent = new StreamContent(stream);
+                Console.WriteLine("🔍 DEBUG VideoService: Creating multipart content...");
 
-                // Establecer tipo de contenido
-                fileContent.Headers.ContentType = new MediaTypeHeaderValue(
+                // Preparar contenido multipart - SIN using statements para evitar que se cierren los streams
+                var content = new MultipartFormDataContent();
+
+                // Agregar archivo de video - crear ByteArrayContent en lugar de StreamContent
+                var videoContent = new ByteArrayContent(videoData);
+                videoContent.Headers.ContentType = new MediaTypeHeaderValue(
                     contentType ?? "application/octet-stream");
 
-                content.Add(fileContent, "videoFile", fileName);
-                content.Add(new StringContent(title, Encoding.UTF8, "text/plain"), "name");
-                content.Add(new StringContent(description, Encoding.UTF8, "text/plain"), "description");
+                content.Add(videoContent, "VideoFile", fileName);
+                Console.WriteLine($"🔍 DEBUG VideoService: Added video file: {fileName}");
+
+                // Agregar thumbnail si se proporciona - crear ByteArrayContent en lugar de StreamContent
+                if (thumbnailData != null && !string.IsNullOrEmpty(thumbnailFileName))
+                {
+                    Console.WriteLine($"🔍 DEBUG VideoService: Adding thumbnail file: {thumbnailFileName}");
+
+                    var thumbnailContent = new ByteArrayContent(thumbnailData);
+                    thumbnailContent.Headers.ContentType = new MediaTypeHeaderValue(
+                        thumbnailContentType ?? "application/octet-stream");
+
+                    content.Add(thumbnailContent, "ThumbnailFile", thumbnailFileName);
+                    Console.WriteLine("🔍 DEBUG VideoService: Thumbnail added to multipart content");
+                }
+                else
+                {
+                    Console.WriteLine("🔍 DEBUG VideoService: No thumbnail data provided");
+                }
+
+                // Agregar campos de texto
+                content.Add(new StringContent(title, Encoding.UTF8, "text/plain"), "Name");
+                content.Add(new StringContent(description, Encoding.UTF8, "text/plain"), "Description");
+                Console.WriteLine("🔍 DEBUG VideoService: Added text fields");
+
+                Console.WriteLine($"🔍 DEBUG VideoService: Sending POST request to {_videosApiEndpoint}");
 
                 // Realizar solicitud
                 var response = await _httpClient.PostAsync(_videosApiEndpoint, content);
 
+                Console.WriteLine($"🔍 DEBUG VideoService: Response status: {response.StatusCode}");
+
                 // Manejar respuesta
                 if (response.IsSuccessStatusCode)
                 {
+                    var responseContent = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine($"🔍 DEBUG VideoService: Response content: {responseContent}");
+
                     var videoEntity = await response.Content.ReadFromJsonAsync<Video>();
+                    Console.WriteLine($"🔍 DEBUG VideoService: Deserialized video ID: {videoEntity?.Id}");
+                    Console.WriteLine($"🔍 DEBUG VideoService: Deserialized video ThumbnailUri: {videoEntity?.ThumbnailUri}");
+
                     return (true, videoEntity, null);
                 }
                 else
                 {
                     var errorContent = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine($"🔍 DEBUG VideoService: Error response: {errorContent}");
                     return (false, null, $"Upload failed: {response.StatusCode} - {errorContent}");
                 }
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"🔍 DEBUG VideoService: Exception: {ex.Message}");
+                Console.WriteLine($"🔍 DEBUG VideoService: Stack trace: {ex.StackTrace}");
                 return (false, null, $"Exception during upload: {ex.Message}");
             }
         }
@@ -92,7 +136,23 @@ namespace IA.FrontEnd.Services
             if (Uri.IsWellFormedUriString(videoUri, UriKind.Absolute))
                 return videoUri;
 
-            return $"{_apiBaseUrl}/{videoUri.TrimStart('/')}";
+            // Normalizar las barras invertidas a barras normales para URLs web
+            var normalizedPath = videoUri.Replace('\\', '/').TrimStart('/');
+            return $"{_apiBaseUrl}/{normalizedPath}";
+        }
+
+        // Método para formatear la URL del thumbnail
+        public string FormatThumbnailUrl(string? thumbnailUri)
+        {
+            if (string.IsNullOrEmpty(thumbnailUri))
+                return string.Empty;
+
+            if (Uri.IsWellFormedUriString(thumbnailUri, UriKind.Absolute))
+                return thumbnailUri;
+
+            // Normalizar las barras invertidas a barras normales para URLs web
+            var normalizedPath = thumbnailUri.Replace('\\', '/').TrimStart('/');
+            return $"{_apiBaseUrl}/{normalizedPath}";
         }
     }
 }

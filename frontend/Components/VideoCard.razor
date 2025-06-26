@@ -1,13 +1,15 @@
 ﻿@using MudBlazor
 @using System
+@using IA.FrontEnd.Services
+@using IA.FrontEnd.Utils
+@inject VideoService VideoService
 
 <MudItem xs="12" sm="6" md="4" lg="3">
     <MudLink Href="@($"/video/{VideoId}")">
         <MudCard Class="d-flex flex-column" Style="height: 100%; min-height: 300px;">
-            <MudCardMedia Image="@GetVideoThumbnail()"
+            <MudCardMedia Image="@VideoUtils.GetVideoThumbnail(VideoId, ThumbnailUri, VideoService)"
                           Height="225"
                           Style="aspect-ratio: 16/9; object-fit: cover;" />
-
             <MudCardContent Class="flex-grow-1 d-flex flex-column">
                 <MudText Typo="Typo.subtitle1"
                          Class="mud-typography-ellipsis-2 flex-grow-1"
@@ -18,28 +20,23 @@
                                 overflow: hidden;">
                     @Title
                 </MudText>
-
                 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mt-2">
                     <MudText Typo="Typo.caption" Color="Color.Secondary">
                         @ChannelName
                     </MudText>
-
                     <MudIcon Icon="@Icons.Material.Filled.FiberManualRecord"
                              Size="Size.Small"
                              Color="Color.Secondary"
                              Style="font-size: 0.5rem;" />
-
                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                        @Views views
+                        @VideoUtils.FormatViews(Views) views
                     </MudText>
-
                     <MudIcon Icon="@Icons.Material.Filled.FiberManualRecord"
                              Size="Size.Small"
                              Color="Color.Secondary"
                              Style="font-size: 0.5rem;" />
-
                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                        @PublishedDate
+                        @VideoUtils.FormatDate(PublishedDate)
                     </MudText>
                 </MudStack>
             </MudCardContent>
@@ -52,10 +49,6 @@
     [Parameter] public string Title { get; set; } = string.Empty;
     [Parameter] public string ChannelName { get; set; } = string.Empty;
     [Parameter] public int Views { get; set; }
-    [Parameter] public string PublishedDate { get; set; } = string.Empty;
-
-    private string GetVideoThumbnail()
-    {
-        return "https://picsum.photos/400/225?random=" + VideoId;
-    }
+    [Parameter] public DateTime PublishedDate { get; set; }
+    [Parameter] public string? ThumbnailUri { get; set; }
 }

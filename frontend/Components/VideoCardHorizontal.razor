@@ -1,5 +1,8 @@
 ﻿@using MudBlazor
 @using System
+@using IA.FrontEnd.Services
+@using IA.FrontEnd.Utils
+@inject VideoService VideoService
 
 <MudItem xs="12" sm="12" md="12" Style="overflow: hidden;" Class="pb-3">
     <MudLink Href="@($"/video/{VideoId}")">
@@ -8,13 +11,12 @@
                 <MudStack Spacing="3" Row="true" Style="height: 100%; width: 100%;">
                     <MudContainer class="align-items-center d-flex p-0" Style="flex: 0 0 40%;">
                         <MudImage ObjectFit="ObjectFit.Cover"
-                                  Src="@GetVideoThumbnail()"
+                                  Src="@VideoUtils.GetVideoThumbnail(VideoId, ThumbnailUri, VideoService)"
                                   ObjectPosition="ObjectPosition.Center"
                                   Elevation="0"
                                   Class="rounded-2 w-100"
                                   Style="aspect-ratio: 16/9;" />
                     </MudContainer>
-
                     <MudStack Spacing="1" Style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start;">
                         <MudText Typo="Typo.subtitle1"
                                  Style="display: -webkit-box;
@@ -22,34 +24,28 @@
                                         -webkit-box-orient: vertical;
                                         overflow: hidden;
                                         text-overflow: ellipsis;
-                                        font-weight: 500;"
+                                        font-weight: 500;
+                                        line-height: 1.2;"
                                  Title="@Title">
                             @Title
                         </MudText>
-
-                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mt-1">
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @ChannelName
-                            </MudText>
-
-                            <MudIcon Icon="@Icons.Material.Filled.FiberManualRecord"
-                                     Size="Size.Small"
-                                     Color="Color.Secondary"
-                                     Style="font-size: 0.5rem;" />
-
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @Views views
-                            </MudText>
-
-                            <MudIcon Icon="@Icons.Material.Filled.FiberManualRecord"
-                                     Size="Size.Small"
-                                     Color="Color.Secondary"
-                                     Style="font-size: 0.5rem;" />
-
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @PublishedDate
-                            </MudText>
-                        </MudStack>
+                        <MudText Typo="Typo.caption"
+                                 Color="Color.Secondary"
+                                 Class="mt-1"
+                                 Style="white-space: nowrap;
+                                        overflow: hidden;
+                                        text-overflow: ellipsis;"
+                                 Title="@ChannelName">
+                            @ChannelName
+                        </MudText>
+                        <MudText Typo="Typo.caption"
+                                 Color="Color.Secondary"
+                                 Style="white-space: nowrap;
+                                        overflow: hidden;
+                                        text-overflow: ellipsis;"
+                                 Title="@(VideoUtils.FormatViews(Views) + " views • " + VideoUtils.FormatDate(PublishedDate))">
+                            @VideoUtils.FormatViews(Views) views • @VideoUtils.FormatDate(PublishedDate)
+                        </MudText>
                     </MudStack>
                 </MudStack>
             </MudCardContent>
@@ -62,10 +58,6 @@
     [Parameter] public string Title { get; set; } = string.Empty;
     [Parameter] public string ChannelName { get; set; } = string.Empty;
     [Parameter] public int Views { get; set; }
-    [Parameter] public string PublishedDate { get; set; } = string.Empty;
-
-    private string GetVideoThumbnail()
-    {
-        return "https://picsum.photos/400/225?random=" + VideoId;
-    }
+    [Parameter] public DateTime PublishedDate { get; set; }
+    [Parameter] public string? ThumbnailUri { get; set; }
 }
