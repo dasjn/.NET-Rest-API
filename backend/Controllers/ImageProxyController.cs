@@ -39,7 +39,7 @@ namespace IA.WebAPI.Controllers
 
             try
             {
-                // Validar que la URL es segura (por ejemplo, solo permitir ciertos dominios)
+                // Validar que la URL es segura
                 if (!IsUrlSafe(url))
                 {
                     _logger.LogWarning("Attempted to proxy potentially unsafe URL: {Url}", url);
@@ -47,7 +47,6 @@ namespace IA.WebAPI.Controllers
                 }
 
                 var httpClient = _httpClientFactory.CreateClient("ImageProxy");
-                // Configurar un timeout razonable
                 httpClient.Timeout = TimeSpan.FromSeconds(10);
 
                 var response = await httpClient.GetAsync(url);
@@ -58,10 +57,8 @@ namespace IA.WebAPI.Controllers
                     return StatusCode((int)response.StatusCode);
                 }
 
-                // Obtener el tipo de contenido
                 var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
 
-                // Verificar que es una imagen
                 if (!contentType.StartsWith("image/"))
                 {
                     _logger.LogWarning("URL did not return an image: {ContentType}", contentType);
@@ -70,8 +67,12 @@ namespace IA.WebAPI.Controllers
 
                 var imageBytes = await response.Content.ReadAsByteArrayAsync();
 
-                // Establecer headers para el browser caching
+                // ✅ AGREGAR ESTOS HEADERS CORS ESPECÍFICOS
                 Response.Headers.Append("Cache-Control", "public,max-age=86400");
+                Response.Headers.Append("Cross-Origin-Resource-Policy", "cross-origin");
+                Response.Headers.Append("Access-Control-Allow-Origin", "*");
+                Response.Headers.Append("Access-Control-Allow-Methods", "GET, OPTIONS");
+                Response.Headers.Append("Access-Control-Allow-Headers", "Content-Type");
 
                 return File(imageBytes, contentType);
             }
@@ -100,7 +101,7 @@ namespace IA.WebAPI.Controllers
                     "lh4.googleusercontent.com",
                     "lh5.googleusercontent.com",
                     "lh6.googleusercontent.com",
-                    "storage.googleapis.com"
+                    "storage.googleapis.com",
                 };
 
                 // Verificar si el dominio está en la lista de permitidos

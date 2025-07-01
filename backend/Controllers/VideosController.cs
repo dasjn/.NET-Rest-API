@@ -20,18 +20,18 @@ namespace IA.WebAPI.Controllers
     {
         private readonly IAContext _context;
         private readonly IFileStorageService _fileService;
-        private readonly IThumbnailGeneratorService _thumbnailGenerator; // AÑADIR
+        private readonly IThumbnailGeneratorService _thumbnailGenerator;
         private readonly ILogger<VideosController> _logger;
 
         public VideosController(
             IAContext context,
             IFileStorageService fileService,
-            IThumbnailGeneratorService thumbnailGenerator, // AÑADIR
+            IThumbnailGeneratorService thumbnailGenerator,
             ILogger<VideosController> logger)
         {
             _context = context;
             _fileService = fileService;
-            _thumbnailGenerator = thumbnailGenerator; // AÑADIR
+            _thumbnailGenerator = thumbnailGenerator;
             _logger = logger;
         }
 
@@ -49,8 +49,8 @@ namespace IA.WebAPI.Controllers
                     Name = v.Name,
                     Description = v.Description,
                     PublishDate = v.PublishDate,
-                    Uri = v.Uri,
-                    ThumbnailUri = v.ThumbnailUri,
+                    Uri = v.Uri, // Se corregirá después con ApplyCorrectUrls
+                    ThumbnailUri = v.ThumbnailUri, // Se corregirá después con ApplyCorrectUrls
                     UploadedByUserId = v.UploadedByUserId,
                     UploadedByUserName = v.UploadedByUser != null ? v.UploadedByUser.Name : null,
                     UploadedByUserProfilePictureUrl = v.UploadedByUser != null ? v.UploadedByUser.ProfilePictureUrl : null,
@@ -60,8 +60,11 @@ namespace IA.WebAPI.Controllers
                     CommentsCount = v.Comments.Count
                 });
 
-            // Si el usuario está autenticado, añadir información sobre sus interacciones
+            // Obtener los videos de la base de datos
             var videos = await videosQuery.ToListAsync();
+
+            // Aplicar URLs correctas (local o blob storage)
+            videos = ApplyCorrectUrls(videos);
 
             if (userId.HasValue)
             {
@@ -115,8 +118,8 @@ namespace IA.WebAPI.Controllers
                     Name = v.Name,
                     Description = v.Description,
                     PublishDate = v.PublishDate,
-                    Uri = v.Uri,
-                    ThumbnailUri = v.ThumbnailUri,
+                    Uri = v.Uri, // Se corregirá después con ApplyCorrectUrls
+                    ThumbnailUri = v.ThumbnailUri, // Se corregirá después con ApplyCorrectUrls
                     UploadedByUserId = v.UploadedByUserId,
                     UploadedByUserName = v.UploadedByUser != null ? v.UploadedByUser.Name : null,
                     UploadedByUserProfilePictureUrl = v.UploadedByUser != null ? v.UploadedByUser.ProfilePictureUrl : null,
@@ -128,6 +131,9 @@ namespace IA.WebAPI.Controllers
 
             // Obtener los videos
             var videos = await videosQuery.ToListAsync();
+
+            // Aplicar URLs correctas (local o blob storage)
+            videos = ApplyCorrectUrls(videos);
 
             // Obtener todas las interacciones del usuario actual en una sola consulta
             var userInteractions = await _context.VideoInteractions
@@ -182,8 +188,8 @@ namespace IA.WebAPI.Controllers
                     Name = v.Name,
                     Description = v.Description,
                     PublishDate = v.PublishDate,
-                    Uri = v.Uri,
-                    ThumbnailUri = v.ThumbnailUri,
+                    Uri = v.Uri, // Se corregirá después con ApplyCorrectUrls
+                    ThumbnailUri = v.ThumbnailUri, // Se corregirá después con ApplyCorrectUrls
                     UploadedByUserId = v.UploadedByUserId,
                     UploadedByUserName = v.UploadedByUser != null ? v.UploadedByUser.Name : null,
                     UploadedByUserProfilePictureUrl = v.UploadedByUser != null ? v.UploadedByUser.ProfilePictureUrl : null,
@@ -195,6 +201,9 @@ namespace IA.WebAPI.Controllers
 
             // Get the result
             var videos = await videosQuery.ToListAsync();
+
+            // Aplicar URLs correctas (local o blob storage)
+            videos = ApplyCorrectUrls(videos);
 
             // If user is authenticated, add their interaction information
             if (userId.HasValue)
@@ -243,8 +252,8 @@ namespace IA.WebAPI.Controllers
                     Name = v.Name,
                     Description = v.Description,
                     PublishDate = v.PublishDate,
-                    Uri = v.Uri,
-                    ThumbnailUri = v.ThumbnailUri,
+                    Uri = v.Uri, // Se corregirá después con ApplyCorrectUrls
+                    ThumbnailUri = v.ThumbnailUri, // Se corregirá después con ApplyCorrectUrls
                     UploadedByUserId = v.UploadedByUserId,
                     UploadedByUserName = v.UploadedByUser != null ? v.UploadedByUser.Name : null,
                     UploadedByUserProfilePictureUrl = v.UploadedByUser != null ? v.UploadedByUser.ProfilePictureUrl : null,
@@ -259,6 +268,9 @@ namespace IA.WebAPI.Controllers
             {
                 return NotFound();
             }
+
+            // Aplicar URLs correctas (local o blob storage)
+            video = ApplyCorrectUrls(video);
 
             // Si hay un usuario autenticado, añadir información sobre sus interacciones
             if (User.Identity?.IsAuthenticated == true)
@@ -415,20 +427,14 @@ namespace IA.WebAPI.Controllers
                     }
                 }
 
-                // Mantener el formato de ruta original para compatibilidad
-                string originalStyleVideoPath = Path.Combine("Uploads", "Videos", Path.GetFileName(videoRelativePath));
-                string? originalStyleThumbnailPath = thumbnailRelativePath != null
-                    ? Path.Combine("Uploads", "Thumbnails", Path.GetFileName(thumbnailRelativePath))
-                    : null;
-
-                // Crear un nuevo objeto Video
+                // Crear un nuevo objeto Video (guardamos las rutas como están, sin URLs completas)
                 var videoEntity = new Video
                 {
                     Name = uploadDto.Name,
                     Description = uploadDto.Description,
                     PublishDate = DateTime.UtcNow,
-                    Uri = originalStyleVideoPath,
-                    ThumbnailUri = originalStyleThumbnailPath,
+                    Uri = videoRelativePath, // Guardamos solo la ruta relativa
+                    ThumbnailUri = thumbnailRelativePath, // Guardamos solo la ruta relativa
                     UploadedByUserId = userId
                 };
 
@@ -436,29 +442,35 @@ namespace IA.WebAPI.Controllers
                 _context.Videos.Add(videoEntity);
                 await _context.SaveChangesAsync();
 
-                // Retornar el video creado con formato DTO
+                // Crear DTO para la respuesta con URLs correctas
+                var responseDto = new VideoDto
+                {
+                    Id = videoEntity.Id,
+                    Name = videoEntity.Name,
+                    Description = videoEntity.Description,
+                    PublishDate = videoEntity.PublishDate,
+                    Uri = videoEntity.Uri, // Se corregirá a continuación
+                    ThumbnailUri = videoEntity.ThumbnailUri, // Se corregirá a continuación
+                    UploadedByUserId = userId,
+                    UploadedByUserName = userName,
+                    LikesCount = 0,
+                    FavoritesCount = 0,
+                    ViewsCount = 0,
+                    CommentsCount = 0,
+                    UserHasLiked = false,
+                    UserHasFavorited = false,
+                    UserHasWatchLater = false,
+                    UserHasViewed = false
+                };
+
+                // Aplicar URLs correctas (local o blob storage) para la respuesta
+                responseDto = ApplyCorrectUrls(responseDto);
+
+                // Retornar el video creado con URLs correctas
                 return CreatedAtAction(
                     nameof(GetVideo),
                     new { id = videoEntity.Id },
-                    new VideoDto
-                    {
-                        Id = videoEntity.Id,
-                        Name = videoEntity.Name,
-                        Description = videoEntity.Description,
-                        PublishDate = videoEntity.PublishDate,
-                        Uri = videoEntity.Uri,
-                        ThumbnailUri = videoEntity.ThumbnailUri,
-                        UploadedByUserId = userId,
-                        UploadedByUserName = userName,
-                        LikesCount = 0,
-                        FavoritesCount = 0,
-                        ViewsCount = 0,
-                        CommentsCount = 0,
-                        UserHasLiked = false,
-                        UserHasFavorited = false,
-                        UserHasWatchLater = false,
-                        UserHasViewed = false
-                    });
+                    responseDto);
             }
             catch (ArgumentException ex)
             {
@@ -490,18 +502,23 @@ namespace IA.WebAPI.Controllers
                 return Forbid("Solo el propietario puede eliminar este video");
             }
 
-            // Convertir la ruta al formato que espera FileStorageService
-            string storageServicePath = video.Uri.Replace("Uploads/", "").Replace("Uploads\\", "");
-
-            // Eliminar el archivo físico
+            // Eliminar archivos físicos (usar las rutas tal como están almacenadas)
             try
             {
-                await _fileService.DeleteFileAsync(storageServicePath);
+                if (!string.IsNullOrEmpty(video.Uri))
+                {
+                    await _fileService.DeleteFileAsync(video.Uri);
+                }
+
+                if (!string.IsNullOrEmpty(video.ThumbnailUri))
+                {
+                    await _fileService.DeleteFileAsync(video.ThumbnailUri);
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Could not delete video file for ID {VideoId}: {Message}", id, ex.Message);
-                // Continuamos con la eliminación del registro aunque el archivo físico no se pueda eliminar
+                _logger.LogWarning(ex, "Could not delete files for video ID {VideoId}: {Message}", id, ex.Message);
+                // Continuamos con la eliminación del registro aunque los archivos físicos no se puedan eliminar
             }
 
             // Eliminar todas las interacciones asociadas
@@ -538,5 +555,41 @@ namespace IA.WebAPI.Controllers
 
             return userId;
         }
+
+        #region URL Helper Methods
+
+        /// <summary>
+        /// Aplica las URLs correctas (local o blob storage) a un VideoDto
+        /// </summary>
+        private VideoDto ApplyCorrectUrls(VideoDto video)
+        {
+            // Aplicar URL correcta para el video
+            if (!string.IsNullOrEmpty(video.Uri))
+            {
+                video.Uri = _fileService.GetFileUrl(video.Uri);
+            }
+
+            // Aplicar URL correcta para el thumbnail
+            if (!string.IsNullOrEmpty(video.ThumbnailUri))
+            {
+                video.ThumbnailUri = _fileService.GetFileUrl(video.ThumbnailUri);
+            }
+
+            return video;
+        }
+
+        /// <summary>
+        /// Aplica las URLs correctas a una lista de VideoDto
+        /// </summary>
+        private List<VideoDto> ApplyCorrectUrls(List<VideoDto> videos)
+        {
+            foreach (var video in videos)
+            {
+                ApplyCorrectUrls(video);
+            }
+            return videos;
+        }
+
+        #endregion
     }
 }

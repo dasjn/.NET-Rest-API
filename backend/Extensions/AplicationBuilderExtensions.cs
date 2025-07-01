@@ -72,23 +72,39 @@ namespace IA.WebAPI.Extensions
 
         public static WebApplication ConfigureStaticFiles(this WebApplication app)
         {
-            var frontendUrl = app.Configuration["Authentication:FrontendBaseUrl"] ?? "https://localhost:44337";
+            // Solo configurar archivos estáticos si NO estamos usando Azure Storage
+            var useAzureStorage = app.Configuration.GetValue<bool>("AzureStorage:UseAzureStorage");
 
-            app.UseStaticFiles(new StaticFileOptions
+            if (!useAzureStorage)
             {
-                FileProvider = new PhysicalFileProvider(Path.Combine(Directory.GetCurrentDirectory(), "Uploads")),
-                RequestPath = "/Uploads",
-                ServeUnknownFileTypes = true,
-                DefaultContentType = "application/octet-stream",
-                OnPrepareResponse = ctx =>
+                // Solo crear el proveedor de archivos físicos si usamos almacenamiento local
+                var uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), "Uploads");
+
+                // Crear directorio si no existe (solo para almacenamiento local)
+                if (!Directory.Exists(uploadsPath))
                 {
-                    var headers = ctx.Context.Response.Headers;
-                    headers.AccessControlAllowOrigin = frontendUrl;
-                    headers.AccessControlAllowMethods = "GET, OPTIONS";
-                    headers.AccessControlAllowHeaders = "Content-Type";
-                    headers["Cross-Origin-Resource-Policy"] = "cross-origin";
+                    Directory.CreateDirectory(uploadsPath);
                 }
-            });
+
+                var frontendUrl = app.Configuration["Authentication:FrontendBaseUrl"] ?? "https://localhost:44337";
+
+                app.UseStaticFiles(new StaticFileOptions
+                {
+                    FileProvider = new PhysicalFileProvider(uploadsPath),
+                    RequestPath = "/Uploads",
+                    ServeUnknownFileTypes = true,
+                    DefaultContentType = "application/octet-stream",
+                    OnPrepareResponse = ctx =>
+                    {
+                        var headers = ctx.Context.Response.Headers;
+                        headers.AccessControlAllowOrigin = frontendUrl;
+                        headers.AccessControlAllowMethods = "GET, OPTIONS";
+                        headers.AccessControlAllowHeaders = "Content-Type";
+                        headers["Cross-Origin-Resource-Policy"] = "cross-origin";
+                    }
+                });
+            }
+            // Si usamos Azure Storage, no configuramos archivos estáticos locales
 
             return app;
         }

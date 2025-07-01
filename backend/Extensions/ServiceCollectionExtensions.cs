@@ -55,6 +55,7 @@ namespace IA.WebAPI.Extensions
 
             // Configurar opciones basadas en appsettings.json
             services.Configure<AuthOptions>(configuration.GetSection(AuthOptions.SectionName));
+            services.Configure<AzureStorageOptions>(configuration.GetSection(AzureStorageOptions.SectionName));
 
             // Configurar autenticación
             services.AddAppAuthentication(configuration);

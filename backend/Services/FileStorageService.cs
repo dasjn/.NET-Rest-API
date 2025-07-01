@@ -1,4 +1,8 @@
-﻿// Actualización de Services/FileStorageService.cs para aumentar el límite de videos a 5GB
+﻿using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
+using Azure.Storage.Sas;
+using IA.WebAPI.Options;
+using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
@@ -15,10 +19,12 @@ namespace IA.WebAPI.Services
 
     public class FileStorageService : IFileStorageService
     {
+        private readonly BlobServiceClient? _blobServiceClient;
+        private readonly AzureStorageOptions _storageOptions;
         private readonly IWebHostEnvironment _environment;
-        private readonly IConfiguration _configuration;
         private readonly ILogger<FileStorageService> _logger;
-        private readonly string _uploadsBaseDirectory;
+        private readonly string _localUploadsBaseDirectory;
+        private readonly bool _useAzureStorage;
 
         // Lista de extensiones permitidas incluyendo videos
         private readonly string[] _allowedExtensions = { 
@@ -67,113 +73,490 @@ namespace IA.WebAPI.Services
         };
 
         public FileStorageService(
-            IWebHostEnvironment environment,
             IConfiguration configuration,
+            IOptions<AzureStorageOptions> storageOptions,
+            IWebHostEnvironment environment,
             ILogger<FileStorageService> logger)
         {
+            _storageOptions = storageOptions.Value;
             _environment = environment;
-            _configuration = configuration;
             _logger = logger;
 
-            // Directorio base para uploads
-            _uploadsBaseDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
+            // Determinar qué estrategia de almacenamiento usar
+            _useAzureStorage = _storageOptions.ShouldUseAzureStorage(_environment);
 
-            // Crear el directorio si no existe
-            if (!Directory.Exists(_uploadsBaseDirectory))
+            // Configurar almacenamiento local
+            _localUploadsBaseDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
+
+            if (_useAzureStorage)
             {
-                Directory.CreateDirectory(_uploadsBaseDirectory);
+                // Configurar Azure Blob Storage
+                var connectionString = configuration.GetConnectionString("AzureStorage");
+                if (string.IsNullOrEmpty(connectionString))
+                {
+                    throw new InvalidOperationException("AzureStorage connection string is required when UseAzureStorage is enabled");
+                }
+
+                _blobServiceClient = new BlobServiceClient(connectionString);
+
+                // Inicializar contenedores de forma asíncrona
+                _ = Task.Run(InitializeContainersAsync);
+
+                _logger.LogInformation("FileStorageService configured for Azure Blob Storage with SAS tokens (Environment: {Environment})",
+                    _environment.EnvironmentName);
             }
+            else
+            {
+                // Configurar almacenamiento local
+                if (!Directory.Exists(_localUploadsBaseDirectory))
+                {
+                    Directory.CreateDirectory(_localUploadsBaseDirectory);
+                }
+
+                _logger.LogInformation("FileStorageService configured for Local Storage (Environment: {Environment})",
+                    _environment.EnvironmentName);
+            }
+        }
+
+        private async Task InitializeContainersAsync()
+        {
+            if (_blobServiceClient == null) return;
+
+            try
+            {
+                // Crear contenedores si no existen (PRIVADOS - sin acceso público)
+                await CreateContainerIfNotExistsAsync(_storageOptions.ContainerNameVideos);
+                await CreateContainerIfNotExistsAsync(_storageOptions.ContainerNameThumbnails);
+
+                _logger.LogInformation("Azure Blob Storage containers initialized successfully (Private access)");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error initializing Azure Blob Storage containers");
+            }
+        }
+
+        private async Task CreateContainerIfNotExistsAsync(string containerName)
+        {
+            if (_blobServiceClient == null) return;
+
+            var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
+            // IMPORTANTE: PublicAccessType.None = Acceso privado, requiere SAS tokens
+            await containerClient.CreateIfNotExistsAsync(PublicAccessType.None);
         }
 
         public string GetUploadsBaseDirectory()
         {
-            return _uploadsBaseDirectory;
+            return _useAzureStorage ? _storageOptions.BaseUrl : _localUploadsBaseDirectory;
         }
 
         public async Task<string> SaveFileAsync(IFormFile file, string subDirectory = "")
         {
             ValidateFile(file);
 
-            // Sanitizar el nombre de archivo y crear nombre único
-            string safeFileName = GetSafeFileName(file.FileName);
-            string uniqueFileName = $"{GenerateUniqueId()}-{safeFileName}";
-
-            // Crear subdirectorio si se especifica
-            string targetDirectory = _uploadsBaseDirectory;
-            if (!string.IsNullOrWhiteSpace(subDirectory))
+            if (_useAzureStorage)
             {
-                // Sanitizar subdirectorio
-                subDirectory = Regex.Replace(subDirectory, @"[^\w\d]", "_");
-                targetDirectory = Path.Combine(_uploadsBaseDirectory, subDirectory);
-
-                if (!Directory.Exists(targetDirectory))
-                {
-                    Directory.CreateDirectory(targetDirectory);
-                }
+                return await SaveFileToAzureAsync(file, subDirectory);
             }
-
-            string filePath = Path.Combine(targetDirectory, uniqueFileName);
-
-            // Guardar el archivo físicamente
-            using (var stream = new FileStream(filePath, FileMode.Create))
+            else
             {
-                await file.CopyToAsync(stream);
+                return await SaveFileToLocalAsync(file, subDirectory);
             }
-
-            // Devolver ruta relativa
-            string relativePath = subDirectory.Length > 0
-                ? Path.Combine(subDirectory, uniqueFileName)
-                : uniqueFileName;
-
-            _logger.LogInformation("Archivo guardado: {FilePath}", relativePath);
-
-            return relativePath;
         }
 
         public async Task<bool> DeleteFileAsync(string filePath)
         {
-            try
+            if (_useAzureStorage)
             {
-                // Sanitizar y validar ruta
-                filePath = SanitizeFilePath(filePath);
-                string fullPath = Path.Combine(_uploadsBaseDirectory, filePath);
-
-                if (!File.Exists(fullPath))
-                {
-                    _logger.LogWarning("Intento de eliminar archivo inexistente: {FilePath}", filePath);
-                    return false;
-                }
-
-                // Eliminar el archivo
-                await Task.Run(() => File.Delete(fullPath));
-                _logger.LogInformation("Archivo eliminado: {FilePath}", filePath);
-                return true;
+                return await DeleteFileFromAzureAsync(filePath);
             }
-            catch (Exception ex)
+            else
             {
-                _logger.LogError(ex, "Error al eliminar archivo: {FilePath}", filePath);
-                return false;
+                return await DeleteFileFromLocalAsync(filePath);
             }
         }
 
         public string GetFileUrl(string fileName)
         {
-            string sanitizedFileName = SanitizeFilePath(fileName);
-            return $"/Uploads/{sanitizedFileName}";
+            if (string.IsNullOrEmpty(fileName))
+                return string.Empty;
+
+            if (_useAzureStorage)
+            {
+                return GetAzureFileUrlWithSAS(fileName);
+            }
+            else
+            {
+                return GetLocalFileUrl(fileName);
+            }
         }
 
         public async Task<byte[]> GetFileAsync(string filePath)
         {
+            if (_useAzureStorage)
+            {
+                return await GetFileFromAzureAsync(filePath);
+            }
+            else
+            {
+                return await GetFileFromLocalAsync(filePath);
+            }
+        }
+
+        #region Azure Storage Implementation
+
+        private async Task<string> SaveFileToAzureAsync(IFormFile file, string subDirectory)
+        {
+            if (_blobServiceClient == null)
+                throw new InvalidOperationException("Blob service client is not initialized");
+
+            try
+            {
+                // Sanitizar el nombre de archivo y crear nombre único
+                string safeFileName = GetSafeFileName(file.FileName);
+                string uniqueFileName = $"{GenerateUniqueId()}-{safeFileName}";
+
+                // Determinar el contenedor basado en el subdirectorio
+                string containerName = GetContainerName(subDirectory);
+                var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
+
+                // Crear el blob client
+                var blobClient = containerClient.GetBlobClient(uniqueFileName);
+
+                // Configurar headers HTTP
+                var httpHeaders = new BlobHttpHeaders
+                {
+                    ContentType = GetContentType(file.FileName)
+                };
+
+                // Subir el archivo
+                using var stream = file.OpenReadStream();
+                await blobClient.UploadAsync(stream, new BlobUploadOptions
+                {
+                    HttpHeaders = httpHeaders,
+                    AccessTier = AccessTier.Hot // Para acceso frecuente
+                });
+
+                _logger.LogInformation("File uploaded to blob storage: {BlobName} in container {ContainerName}",
+                    uniqueFileName, containerName);
+
+                // Devolver ruta relativa que incluye el contenedor
+                return $"{containerName}/{uniqueFileName}";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error uploading file to blob storage: {FileName}", file.FileName);
+                throw new InvalidOperationException($"Failed to upload file: {ex.Message}", ex);
+            }
+        }
+
+        private async Task<bool> DeleteFileFromAzureAsync(string filePath)
+        {
+            if (_blobServiceClient == null) return false;
+
+            try
+            {
+                // Parsear la ruta para obtener contenedor y nombre del blob
+                var (containerName, blobName) = ParseFilePath(filePath);
+
+                if (string.IsNullOrEmpty(containerName) || string.IsNullOrEmpty(blobName))
+                {
+                    _logger.LogWarning("Invalid file path format: {FilePath}", filePath);
+                    return false;
+                }
+
+                var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
+                var blobClient = containerClient.GetBlobClient(blobName);
+
+                var response = await blobClient.DeleteIfExistsAsync();
+
+                if (response.Value)
+                {
+                    _logger.LogInformation("File deleted from blob storage: {FilePath}", filePath);
+                    return true;
+                }
+                else
+                {
+                    _logger.LogWarning("File not found in blob storage: {FilePath}", filePath);
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting file from blob storage: {FilePath}", filePath);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// NUEVO: Genera URLs con SAS tokens para acceso seguro a Azure Blob Storage
+        /// </summary>
+        private string GetAzureFileUrlWithSAS(string fileName)
+        {
+            try
+            {
+                if (_blobServiceClient == null)
+                {
+                    _logger.LogWarning("Blob service client is null, returning basic URL");
+                    return GetAzureFileUrlBasic(fileName);
+                }
+
+                // Si ya es una URL completa, devolverla tal como está
+                if (fileName.StartsWith("http"))
+                    return fileName;
+
+                // Parsear la ruta para obtener contenedor y blob
+                var (containerName, blobName) = ParseFilePath(fileName);
+
+                if (string.IsNullOrEmpty(containerName) || string.IsNullOrEmpty(blobName))
+                {
+                    _logger.LogWarning("Could not parse file path for SAS generation: {FileName}", fileName);
+                    return GetAzureFileUrlBasic(fileName);
+                }
+
+                // Obtener el blob client
+                var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
+                var blobClient = containerClient.GetBlobClient(blobName);
+
+                // Verificar si puede generar SAS tokens
+                if (!blobClient.CanGenerateSasUri)
+                {
+                    _logger.LogWarning("Cannot generate SAS URI for blob: {BlobName}", blobName);
+                    return GetAzureFileUrlBasic(fileName);
+                }
+
+                // Crear SAS token con permisos de lectura y expiración de 24 horas
+                var sasBuilder = new BlobSasBuilder
+                {
+                    BlobContainerName = containerName,
+                    BlobName = blobName,
+                    Resource = "b", // blob
+                    ExpiresOn = DateTimeOffset.UtcNow.AddHours(24) // Token válido por 24 horas
+                };
+
+                // Solo permisos de lectura
+                sasBuilder.SetPermissions(BlobSasPermissions.Read);
+
+                // Generar la URL con SAS token
+                var sasUri = blobClient.GenerateSasUri(sasBuilder);
+
+                _logger.LogDebug("Generated SAS URL for blob: {BlobName} (expires: {Expiry})",
+                    blobName, sasBuilder.ExpiresOn);
+
+                return sasUri.ToString();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating SAS token for file: {FileName}", fileName);
+                // Fallback a URL básica en caso de error
+                return GetAzureFileUrlBasic(fileName);
+            }
+        }
+
+        /// <summary>
+        /// Método de fallback para generar URL básica (sin SAS)
+        /// </summary>
+        private string GetAzureFileUrlBasic(string fileName)
+        {
+            // Si ya es una URL completa, devolverla tal como está
+            if (fileName.StartsWith("http"))
+                return fileName;
+
+            // Si contiene el formato contenedor/archivo, construir la URL
+            if (fileName.Contains("/"))
+            {
+                return $"{_storageOptions.BaseUrl}/{fileName}";
+            }
+
+            // Para compatibilidad con el formato anterior, asumir que es un video
+            return $"{_storageOptions.BaseUrl}/{_storageOptions.ContainerNameVideos}/{fileName}";
+        }
+
+        private async Task<byte[]> GetFileFromAzureAsync(string filePath)
+        {
+            if (_blobServiceClient == null)
+                throw new InvalidOperationException("Blob service client is not initialized");
+
+            try
+            {
+                var (containerName, blobName) = ParseFilePath(filePath);
+
+                if (string.IsNullOrEmpty(containerName) || string.IsNullOrEmpty(blobName))
+                {
+                    throw new ArgumentException("Invalid file path format", nameof(filePath));
+                }
+
+                var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
+                var blobClient = containerClient.GetBlobClient(blobName);
+
+                if (!await blobClient.ExistsAsync())
+                {
+                    throw new FileNotFoundException("The requested file was not found", filePath);
+                }
+
+                var response = await blobClient.DownloadContentAsync();
+                return response.Value.Content.ToArray();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error downloading file from blob storage: {FilePath}", filePath);
+                throw;
+            }
+        }
+
+        #endregion
+
+        #region Local Storage Implementation
+
+        private async Task<string> SaveFileToLocalAsync(IFormFile file, string subDirectory)
+        {
+            try
+            {
+                // Sanitizar el nombre de archivo y crear nombre único
+                string safeFileName = GetSafeFileName(file.FileName);
+                string uniqueFileName = $"{GenerateUniqueId()}-{safeFileName}";
+
+                // Crear subdirectorio si se especifica
+                string targetDirectory = _localUploadsBaseDirectory;
+                if (!string.IsNullOrWhiteSpace(subDirectory))
+                {
+                    // Sanitizar subdirectorio
+                    subDirectory = Regex.Replace(subDirectory, @"[^\w\d]", "_");
+                    targetDirectory = Path.Combine(_localUploadsBaseDirectory, subDirectory);
+
+                    if (!Directory.Exists(targetDirectory))
+                    {
+                        Directory.CreateDirectory(targetDirectory);
+                    }
+                }
+
+                string filePath = Path.Combine(targetDirectory, uniqueFileName);
+
+                // Guardar el archivo físicamente
+                using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await file.CopyToAsync(stream);
+                }
+
+                // Devolver ruta relativa
+                string relativePath = subDirectory.Length > 0
+                    ? Path.Combine(subDirectory, uniqueFileName)
+                    : uniqueFileName;
+
+                _logger.LogInformation("File saved locally: {FilePath}", relativePath);
+
+                return relativePath;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error saving file locally: {FileName}", file.FileName);
+                throw new InvalidOperationException($"Failed to save file: {ex.Message}", ex);
+            }
+        }
+
+        private async Task<bool> DeleteFileFromLocalAsync(string filePath)
+        {
+            try
+            {
+                // Sanitizar y validar ruta
+                filePath = SanitizeFilePath(filePath);
+                string fullPath = Path.Combine(_localUploadsBaseDirectory, filePath);
+
+                if (!File.Exists(fullPath))
+                {
+                    _logger.LogWarning("Attempted to delete non-existent file: {FilePath}", filePath);
+                    return false;
+                }
+
+                // Eliminar el archivo
+                await Task.Run(() => File.Delete(fullPath));
+                _logger.LogInformation("File deleted locally: {FilePath}", filePath);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting local file: {FilePath}", filePath);
+                return false;
+            }
+        }
+
+        private string GetLocalFileUrl(string fileName)
+        {
+            string sanitizedFileName = SanitizeFilePath(fileName);
+            return $"/Uploads/{sanitizedFileName}";
+        }
+
+        private async Task<byte[]> GetFileFromLocalAsync(string filePath)
+        {
             filePath = SanitizeFilePath(filePath);
-            string fullPath = Path.Combine(_uploadsBaseDirectory, filePath);
+            string fullPath = Path.Combine(_localUploadsBaseDirectory, filePath);
 
             if (!File.Exists(fullPath))
             {
-                _logger.LogWarning("Archivo solicitado no encontrado: {FilePath}", filePath);
+                _logger.LogWarning("Local file not found: {FilePath}", filePath);
                 throw new FileNotFoundException("The requested file was not found", filePath);
             }
 
             return await File.ReadAllBytesAsync(fullPath);
+        }
+
+        #endregion
+
+        #region Helper Methods
+
+        private string GetContainerName(string subDirectory)
+        {
+            return subDirectory.ToLowerInvariant() switch
+            {
+                "videos" => _storageOptions.ContainerNameVideos,
+                "thumbnails" => _storageOptions.ContainerNameThumbnails,
+                _ => _storageOptions.ContainerNameVideos // Default a videos
+            };
+        }
+
+        private (string containerName, string blobName) ParseFilePath(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath))
+                return (string.Empty, string.Empty);
+
+            // Limpiar la ruta
+            filePath = filePath.Replace("\\", "/").TrimStart('/');
+
+            // Si contiene formato Uploads/SubDirectory/filename (formato legacy)
+            if (filePath.StartsWith("Uploads/"))
+            {
+                var parts = filePath.Split('/');
+                if (parts.Length >= 3)
+                {
+                    var subDir = parts[1].ToLowerInvariant();
+                    var fileName = string.Join("/", parts.Skip(2));
+                    var containerName = GetContainerName(subDir);
+                    return (containerName, fileName);
+                }
+            }
+
+            // Si contiene formato container/filename
+            if (filePath.Contains("/"))
+            {
+                var parts = filePath.Split('/', 2);
+                return (parts[0], parts[1]);
+            }
+
+            // Si es solo el nombre del archivo, asumir que está en videos
+            return (_storageOptions.ContainerNameVideos, filePath);
+        }
+
+        private string GetContentType(string fileName)
+        {
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
+
+            if (_videoContentTypes.TryGetValue(extension, out var videoType))
+                return videoType;
+
+            if (_imageContentTypes.TryGetValue(extension, out var imageType))
+                return imageType;
+
+            return "application/octet-stream";
         }
 
         private void ValidateFile(IFormFile file)
@@ -227,6 +610,7 @@ namespace IA.WebAPI.Services
                 throw new ArgumentException("Invalid file name");
             }
         }
+
         private string GetSafeFileName(string fileName)
         {
             // Eliminar caracteres inválidos y limitar longitud
@@ -259,6 +643,6 @@ namespace IA.WebAPI.Services
             return Regex.Replace(filePath, @"[^\w\d\._/-]", "_");
         }
 
-        
+        #endregion
     }
 }

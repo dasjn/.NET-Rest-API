@@ -20,7 +20,7 @@
     <MudStack Style="width: 100%">
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-7" />
         <MudText Typo="Typo.body1" Align="Align.Center">
-            @(_videoWasProcessed ? "Uploading processed video..." : "Processing and uploading video...")
+            @GetUploadProgressMessage()
         </MudText>
     </MudStack>
 }
@@ -309,6 +309,20 @@ else
         TimeSpan time = TimeSpan.FromSeconds(totalSeconds);
         return $"{time.Hours:D2}:{time.Minutes:D2}:{time.Seconds:D2}";
     }
+    private string GetUploadProgressMessage()
+    {
+        if (!string.IsNullOrEmpty(_progressMessage) && _progressMessage.Contains("thumbnail"))
+        {
+            return "Generating automatic thumbnail";
+        }
+
+        if (_videoWasProcessed)
+        {
+            return "Uploading processed video...";
+        }
+
+        return "Processing and uploading video...";
+    }
     #endregion
 
     #region File Handling Methods
@@ -475,6 +489,83 @@ else
             Snackbar.Add($"❌ Error processing thumbnail: {ex.Message}", Severity.Error);
         }
     }
+
+    private async Task GenerateAutomaticThumbnail()
+    {
+        try
+        {
+            if (_videoData == null)
+            {
+                AppendToLog("❌ No hay datos de video para generar thumbnail");
+                return;
+            }
+
+            AppendToLog("🖼️ Iniciando generación automática de thumbnail...");
+            _progressMessage = "Generando thumbnail automático...";
+            StateHasChanged();
+
+            // Crear instancia temporal de FFmpeg para thumbnail
+            var ffmpegThumbnail = FFmpegFactory.CreateFFmpeg(new FFmpegConfig() { Log = true });
+            await ffmpegThumbnail.Load();
+
+            if (!ffmpegThumbnail.IsLoaded)
+            {
+                AppendToLog("❌ No se pudo cargar FFmpeg para thumbnail");
+                return;
+            }
+
+            // Usar el archivo original para generar thumbnail
+            ffmpegThumbnail.WriteFile(_inputFileName, _videoData);
+
+            // Calcular tiempo para captura (20% del video, mínimo 1 segundo)
+            var captureTime = Math.Max(1, _videoDurationInSeconds * 0.2);
+            var timeFormatted = TimeSpan.FromSeconds(captureTime).ToString(@"hh\:mm\:ss");
+
+            var thumbnailFileName = $"thumb_{_inputFileName}.jpg";
+
+            AppendToLog($"🖼️ Capturando frame en {timeFormatted}...");
+
+            // Generar thumbnail: capturar un frame y convertir a JPG
+            await ffmpegThumbnail.Run(
+                "-i", _inputFileName,
+                "-ss", timeFormatted,
+                "-vframes", "1",
+                "-q:v", "2",
+                "-s", "320x180",
+                thumbnailFileName);
+
+            // Leer el thumbnail generado
+            var thumbnailBytes = await ffmpegThumbnail.ReadFile(thumbnailFileName);
+
+            if (thumbnailBytes != null && thumbnailBytes.Length > 0)
+            {
+                _thumbnailData = thumbnailBytes;
+                _selectedThumbnailFileName = thumbnailFileName;
+
+                // Crear preview URL
+                _thumbnailPreviewUrl = FFmpegFactory.CreateURLFromBuffer(_thumbnailData, thumbnailFileName, "image/jpeg");
+
+                AppendToLog($"✅ Thumbnail automático generado: {_thumbnailData.Length} bytes");
+                _progressMessage = "Thumbnail generado correctamente";
+                StateHasChanged();
+
+                // Actualizar la UI para mostrar el thumbnail generado
+                StateHasChanged();
+            }
+            else
+            {
+                AppendToLog("❌ No se pudo generar thumbnail automático");
+            }
+
+            // Limpiar archivos temporales
+            ffmpegThumbnail.UnlinkFile(_inputFileName);
+            ffmpegThumbnail.UnlinkFile(thumbnailFileName);
+        }
+        catch (Exception ex)
+        {
+            AppendToLog($"❌ Error generando thumbnail automático: {ex.Message}");
+        }
+    }
     #endregion
 
     #region Video Processing Methods
@@ -507,6 +598,12 @@ else
         {
             bool needsTrimming = _startTimeCut != _startTimeMin || _endTimeCut != _videoDurationInSeconds;
             _isUploading = true;
+
+            if (_thumbnailData == null && _videoData != null)
+            {
+                AppendToLog("🖼️ Generando thumbnail automático...");
+                await GenerateAutomaticThumbnail();
+            }
 
             // DEBUG: Verificar estado del thumbnail antes del upload
             DebugUploadState();
@@ -656,6 +753,7 @@ else
                 string thumbnailText = _thumbnailData != null ? "with custom thumbnail " : "";
 
                 AppendToLog($"✅ Video {processText}uploaded successfully {thumbnailText}(ID: {videoEntity.Id})");
+                _progressMessage = "";
 
                 // DEBUG: Log the returned video entity
                 AppendToLog($"📊 DEBUG: Returned video ThumbnailUri: {videoEntity.ThumbnailUri}");

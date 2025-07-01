@@ -5,6 +5,7 @@
 @inject VideoInteractionService InteractionService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
+@inject ConfigurationSettings Config
 
 <PageTitle>@(videoDetails?.Name ?? "Cargando video...")</PageTitle>
 
@@ -147,8 +148,6 @@
     private long? replyToCommentId;
     private string? replyToUserName;
 
-    private string? uploaderProfilePicture;
-
     protected override async Task OnInitializedAsync()
     {
         await LoadVideoDetails();
@@ -243,17 +242,13 @@
         if (uri.StartsWith("http"))
             return uri;
 
-        return $"https://localhost:7113/{uri.Replace("\\", "/")}";
+        var normalizedPath = uri.Replace('\\', '/').TrimStart('/');
+        return $"{Config.ApiBaseUrl}/{normalizedPath}";
     }
 
     private string? GetUploaderProfilePicture()
     {
-        // Si tenemos una imagen de perfil personalizada para el creador, la usamos
-        if (!string.IsNullOrEmpty(uploaderProfilePicture))
-            return uploaderProfilePicture;
-
-        // De lo contrario, devolvemos null y UserAvatar usará la imagen por defecto
-        return null;
+        return videoDetails?.UploadedByUserProfilePictureUrl;
     }
 
     #region Comment Handlers

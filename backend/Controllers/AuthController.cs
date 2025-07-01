@@ -33,6 +33,11 @@ namespace IA.WebAPI.Controllers
         private readonly AuthOptions _authOptions;
         private readonly ILogger<AuthController> _logger;
         private readonly IAContext _context;
+        private readonly string[] _allowedEmails = new[]
+        {
+            "davidsosajunquera@gmail.com",
+            "davids96j@gmail.com",
+        };
 
         /// <summary>
         /// Constructor del controlador de autenticación
@@ -137,6 +142,12 @@ namespace IA.WebAPI.Controllers
 
                 // Obtener información del usuario
                 var userInfo = await _googleAuthService.GetUserInfoAsync(tokenResponse.AccessToken);
+
+                if (!_allowedEmails.Contains(userInfo.Email))
+                {
+                    _logger.LogWarning("Usuario no autorizado intentó acceder: {Email}", userInfo.Email);
+                    return RedirectToLoginFailed("usuario_no_autorizado", "Tu cuenta no tiene acceso a esta aplicación");
+                }
 
                 // Crear claims para autenticación
                 var claims = new List<Claim>

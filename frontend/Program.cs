@@ -1,4 +1,4 @@
-using IA.FrontEnd;
+锘縰sing IA.FrontEnd;
 using IA.FrontEnd.Auth;
 using IA.FrontEnd.Components;
 using IA.FrontEnd.PageModels.Layout;
@@ -26,23 +26,38 @@ builder.Services.AddMudServices(config =>
     config.SnackbarConfiguration.SnackbarVariant = Variant.Filled;
 });
 
-// Configuraci髇
-builder.Services.AddSingleton(provider =>
-{
-    var config = provider.GetRequiredService<IConfiguration>();
-    var apiBaseUrl = config["ApiBaseUrl"] ?? "https://localhost:7113";
-    return new ConfigurationSettings { ApiBaseUrl = apiBaseUrl };
-});
+// 馃幆 CONFIGURACI脫N CONDICIONAL POR ENTORNO
+string apiBaseUrl;
+var configuredApiUrl = builder.Configuration["ApiBaseUrl"];
 
-// Configurar HttpClient con la URL del backend
-var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "https://localhost:7113";
+// Detectar si est谩 en desarrollo (localhost)
+var isDevelopment = builder.HostEnvironment.BaseAddress.Contains("localhost") ||
+                   builder.HostEnvironment.BaseAddress.Contains("127.0.0.1");
+
+if (isDevelopment)
+{
+    // En desarrollo: usar localhost
+    apiBaseUrl = "https://localhost:7113";
+    Console.WriteLine("Development mode: Using localhost API");
+}
+else
+{
+    // En producci贸n: usar Azure
+    apiBaseUrl = configuredApiUrl ?? "https://interventional-academy-api.azurewebsites.net";
+    Console.WriteLine($"Production mode: Using Azure API: {apiBaseUrl}");
+}
+
+// Configuraci贸n
+builder.Services.AddSingleton(provider => new ConfigurationSettings { ApiBaseUrl = apiBaseUrl });
+
+// Configurar HttpClient con la URL detectada
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
 
-// Servicios de autenticaci髇
+// Servicios de autenticaci贸n
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthStateProvider>();
 builder.Services.AddAuthorizationCore();
 
-// Servicios de la aplicaci髇
+// Servicios de la aplicaci贸n
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<VideoService>();
 builder.Services.AddScoped<VideoInteractionService>();
