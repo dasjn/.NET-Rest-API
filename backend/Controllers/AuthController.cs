@@ -37,6 +37,7 @@ namespace IA.WebAPI.Controllers
         {
             "davidsosajunquera@gmail.com",
             "davids96j@gmail.com",
+            "sanfrux@hotmail.com"
         };
 
         /// <summary>

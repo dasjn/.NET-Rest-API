@@ -140,12 +140,37 @@ else
 
     <MudStack Class="@GetVideoVisibilityClass()" Style="@GetVideoResponsiveStyles()">
         <video id="videoPlayer" style="width: 100%; margin-bottom: 30px;" controls src="@_videoSourceUrl" />
+        
+        @* Video Info Display *@
+        @if (_videoWidth > 0 && _videoHeight > 0)
+        {
+            <MudPaper Class="pa-3 mb-3" Elevation="1">
+                <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.body2">
+                        <strong>Dimensiones:</strong> @_videoWidth x @_videoHeight (@_videoAspectRatio.ToString("F2"))
+                    </MudText>
+                    @if (_needsAspectRatioFix)
+                    {
+                        <MudChip T="string" Color="Color.Warning" Size="Size.Small">
+                            Se reescalará a 16:9 (1920x1080)
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Color="Color.Success" Size="Size.Small">
+                            Ya es 16:9
+                        </MudChip>
+                    }
+                </MudStack>
+            </MudPaper>
+        }
+
         <RangeSlider Min="@_startTimeMin" Max="@_videoDurationInSeconds" Step="1"
                      FromValue="@_startTimeCut" ToValue="@_endTimeCut"
                      FromValueChanged="HandleStartTimeChange" ToValueChanged="HandleEndTimeChange" />
         <MudStack Class="w-100 gap-2">
-            <MudTextField T="string" Label="Title" Variant="Variant.Outlined" @bind-Value=@_videoTitle Class="w-100" />
-            <MudTextField T="string" Label="Description" Variant="Variant.Outlined" @bind-Value=@_videoDescription Lines="3" Class="w-100" />
+            <MudTextField T="string" Label="Title" Variant="Variant.Outlined" @bind-Value=@_videoTitle Class="w-100" Counter="200" MaxLength="200" />
+            <MudTextField T="string" Label="Description" Variant="Variant.Outlined" @bind-Value=@_videoDescription Lines="3" Class="w-100" Counter="5000" MaxLength="5000" />
         </MudStack>
     </MudStack>
 }
@@ -157,8 +182,13 @@ else
     function getVideoDuration(videoElementId, dotnetHelper) {
         const video = document.getElementById(videoElementId);
         video.onloadedmetadata = () => {
-            dotnetHelper.invokeMethodAsync("SetVideoDuration", video.duration)
-                .catch(error => console.error("Error invoking SetVideoDuration:", error));
+            // Obtener dimensiones y duración
+            const width = video.videoWidth;
+            const height = video.videoHeight;
+            const duration = video.duration;
+            
+            dotnetHelper.invokeMethodAsync("SetVideoMetadata", duration, width, height)
+                .catch(error => console.error("Error invoking SetVideoMetadata:", error));
         };
     }
 
@@ -184,6 +214,12 @@ else
     private const string ACCEPTED_IMAGE_EXTENSIONS = ".jpg, .jpeg, .png, .gif, .webp";
     private const string API_BASE_URL = "https://localhost:7113";
     private const string VIDEOS_API_ENDPOINT = "/api/Videos";
+
+    // Constantes para aspect ratio 16:9
+    private const double TARGET_ASPECT_RATIO = 16.0 / 9.0; // 1.777...
+    private const int TARGET_WIDTH = 1920;
+    private const int TARGET_HEIGHT = 1080;
+    private const double ASPECT_RATIO_TOLERANCE = 0.01; // Tolerancia para considerar que ya es 16:9
     #endregion
 
     #region Private Fields
@@ -198,7 +234,13 @@ else
     private IBrowserFile? _selectedThumbnailFile;
     private string? _selectedThumbnailFileName;
     private string _thumbnailPreviewUrl = string.Empty;
-    private byte[]? _thumbnailData; // ← CAMPO AGREGADO
+    private byte[]? _thumbnailData;
+
+    // Video dimension fields
+    private int _videoWidth = 0;
+    private int _videoHeight = 0;
+    private double _videoAspectRatio = 0;
+    private bool _needsAspectRatioFix = false;
 
     private FFMPEG? _ffmpegInstance;
     private byte[]? _videoData;
@@ -309,11 +351,17 @@ else
         TimeSpan time = TimeSpan.FromSeconds(totalSeconds);
         return $"{time.Hours:D2}:{time.Minutes:D2}:{time.Seconds:D2}";
     }
+    
     private string GetUploadProgressMessage()
     {
         if (!string.IsNullOrEmpty(_progressMessage) && _progressMessage.Contains("thumbnail"))
         {
             return "Generating automatic thumbnail";
+        }
+
+        if (_needsAspectRatioFix && _progressMessage.Contains("Progress"))
+        {
+            return "Processing video (scaling to 16:9)...";
         }
 
         if (_videoWasProcessed)
@@ -347,6 +395,12 @@ else
         _videoWasProcessed = false;
         _processedVideoData = null;
 
+        // Reset video dimensions
+        _videoWidth = 0;
+        _videoHeight = 0;
+        _videoAspectRatio = 0;
+        _needsAspectRatioFix = false;
+
         await JSRuntime.InvokeVoidAsync("eval", "document.querySelector('input[type=file]').value = ''");
         ResetDragClass();
         StateHasChanged();
@@ -358,7 +412,7 @@ else
 
         _selectedThumbnailFileName = string.Empty;
         _selectedThumbnailFile = null;
-        _thumbnailData = null; // ← LÍNEA AGREGADA
+        _thumbnailData = null;
 
         if (!string.IsNullOrEmpty(_thumbnailPreviewUrl))
         {
@@ -391,7 +445,7 @@ else
             _progressMessage = string.Empty;
 
             _inputFileName = file.Name;
-            _outputFileName = $"cut_{_inputFileName}";
+            _outputFileName = $"processed_{_inputFileName}";
             _fileContentType = file.ContentType;
             _videoWasProcessed = false;
             _processedVideoData = null;
@@ -525,13 +579,13 @@ else
 
             AppendToLog($"🖼️ Capturando frame en {timeFormatted}...");
 
-            // Generar thumbnail: capturar un frame y convertir a JPG
+            // Generar thumbnail: capturar un frame y convertir a JPG con aspect ratio 16:9
             await ffmpegThumbnail.Run(
                 "-i", _inputFileName,
                 "-ss", timeFormatted,
                 "-vframes", "1",
+                "-vf", "scale=320:180:force_original_aspect_ratio=decrease,pad=320:180:(ow-iw)/2:(oh-ih)/2",
                 "-q:v", "2",
-                "-s", "320x180",
                 thumbnailFileName);
 
             // Leer el thumbnail generado
@@ -570,13 +624,31 @@ else
 
     #region Video Processing Methods
     [JSInvokable]
-    public async Task SetVideoDuration(double duration)
+    public async Task SetVideoMetadata(double duration, int width, int height)
     {
         _videoDurationInSeconds = (int)duration;
         _startTimeCut = 0;
         _endTimeCut = _videoDurationInSeconds;
-        StateHasChanged();
+        
+        // Set video dimensions
+        _videoWidth = width;
+        _videoHeight = height;
+        _videoAspectRatio = width > 0 ? (double)width / height : 0;
+        
+        // Check if aspect ratio fix is needed
+        _needsAspectRatioFix = Math.Abs(_videoAspectRatio - TARGET_ASPECT_RATIO) > ASPECT_RATIO_TOLERANCE;
+        
+        AppendToLog($"📺 Video metadata: {width}x{height} (ratio: {_videoAspectRatio:F3})");
+        if (_needsAspectRatioFix)
+        {
+            AppendToLog($"⚠️ Video necesita reescalado a 16:9 (target: {TARGET_ASPECT_RATIO:F3})");
+        }
+        else
+        {
+            AppendToLog("✅ Video ya tiene aspect ratio 16:9");
+        }
 
+        StateHasChanged();
         await JSRuntime.InvokeVoidAsync("updateSliderTooltips", _startTimeCut, _endTimeCut);
     }
 
@@ -597,6 +669,8 @@ else
         try
         {
             bool needsTrimming = _startTimeCut != _startTimeMin || _endTimeCut != _videoDurationInSeconds;
+            bool needsProcessing = needsTrimming || _needsAspectRatioFix;
+            
             _isUploading = true;
 
             if (_thumbnailData == null && _videoData != null)
@@ -608,14 +682,14 @@ else
             // DEBUG: Verificar estado del thumbnail antes del upload
             DebugUploadState();
 
-            if (needsTrimming)
+            if (needsProcessing)
             {
                 await ProcessVideo();
                 // Upload is handled in UpdateProgress when processing is complete
             }
             else
             {
-                // If no trimming needed, upload directly
+                // If no processing needed, upload directly
                 await UploadVideo();
             }
         }
@@ -646,11 +720,49 @@ else
 
             _ffmpegInstance.WriteFile(_inputFileName, _videoData);
 
-            var startTimeFormatted = TimeSpan.FromSeconds(_startTimeCut).ToString(@"hh\:mm\:ss");
-            var durationFormatted = TimeSpan.FromSeconds(_endTimeCut - _startTimeCut).ToString(@"hh\:mm\:ss");
+            // Construir comando FFmpeg
+            var ffmpegArgs = new List<string> { "-i", _inputFileName };
 
-            AppendToLog($"Trimming video from {startTimeFormatted} for {durationFormatted}...");
-            await _ffmpegInstance.Run("-i", _inputFileName, "-ss", startTimeFormatted, "-t", durationFormatted, _outputFileName);
+            // Determinar si necesita trimming
+            bool needsTrimming = _startTimeCut != _startTimeMin || _endTimeCut != _videoDurationInSeconds;
+            
+            if (needsTrimming)
+            {
+                var startTimeFormatted = TimeSpan.FromSeconds(_startTimeCut).ToString(@"hh\:mm\:ss");
+                var durationFormatted = TimeSpan.FromSeconds(_endTimeCut - _startTimeCut).ToString(@"hh\:mm\:ss");
+                
+                ffmpegArgs.AddRange(["-ss", startTimeFormatted, "-t", durationFormatted]);
+                AppendToLog($"🎬 Trimming video from {startTimeFormatted} for {durationFormatted}...");
+            }
+
+            // Configurar filtros de video
+            var videoFilters = new List<string>();
+
+            if (_needsAspectRatioFix)
+            {
+                // Reescalar manteniendo aspect ratio y agregar letterbox/pillarbox para 16:9
+                videoFilters.Add($"scale={TARGET_WIDTH}:{TARGET_HEIGHT}:force_original_aspect_ratio=decrease");
+                videoFilters.Add($"pad={TARGET_WIDTH}:{TARGET_HEIGHT}:(ow-iw)/2:(oh-ih)/2:black");
+                AppendToLog($"📐 Aplicando reescalado a {TARGET_WIDTH}x{TARGET_HEIGHT} con letterbox/pillarbox...");
+            }
+
+            if (videoFilters.Any())
+            {
+                ffmpegArgs.AddRange(["-vf", string.Join(",", videoFilters)]);
+            }
+
+            // Configurar codec y calidad
+            ffmpegArgs.AddRange([
+                "-c:v", "libx264",
+                "-preset", "medium",
+                "-crf", "23",
+                "-c:a", "aac",
+                "-b:a", "128k",
+                _outputFileName
+            ]);
+
+            AppendToLog($"🔧 Comando FFmpeg: {string.Join(" ", ffmpegArgs)}");
+            await _ffmpegInstance.Run(ffmpegArgs.ToArray());
 
             _ffmpegInstance.UnlinkFile(_inputFileName);
         }
@@ -681,7 +793,8 @@ else
                 _processedVideoUrl = FFmpegFactory.CreateURLFromBuffer(result, _outputFileName, _fileContentType);
                 _videoWasProcessed = true;
 
-                AppendToLog($"✅ Video trimmed successfully: {result.Length} bytes");
+                string processType = _needsAspectRatioFix ? "reescalado y" : "";
+                AppendToLog($"✅ Video {processType} procesado exitosamente: {result.Length} bytes");
 
                 // Change view to processed video
                 _videoSourceUrl = _processedVideoUrl;
@@ -749,16 +862,17 @@ else
 
             if (success && videoEntity != null)
             {
-                string processText = _videoWasProcessed ? "trimmed and " : "";
-                string thumbnailText = _thumbnailData != null ? "with custom thumbnail " : "";
+                string processText = _videoWasProcessed ? "procesado y " : "";
+                string aspectText = _needsAspectRatioFix ? "(reescalado a 16:9) " : "";
+                string thumbnailText = _thumbnailData != null ? "con thumbnail personalizado " : "";
 
-                AppendToLog($"✅ Video {processText}uploaded successfully {thumbnailText}(ID: {videoEntity.Id})");
+                AppendToLog($"✅ Video {processText}{aspectText}subido exitosamente {thumbnailText}(ID: {videoEntity.Id})");
                 _progressMessage = "";
 
                 // DEBUG: Log the returned video entity
                 AppendToLog($"📊 DEBUG: Returned video ThumbnailUri: {videoEntity.ThumbnailUri}");
 
-                Snackbar.Add($"✅ Video {processText}uploaded successfully!", Severity.Success);
+                Snackbar.Add($"✅ Video {processText}{aspectText}uploaded successfully!", Severity.Success);
 
                 // Navigate to the video page
                 Navigation.NavigateTo($"/video/{videoEntity.Id}");
@@ -786,6 +900,8 @@ else
         AppendToLog($"_selectedThumbnailFileName: {_selectedThumbnailFileName ?? "NULL"}");
         AppendToLog($"_thumbnailData: {(_thumbnailData != null ? $"Not null ({_thumbnailData.Length} bytes)" : "NULL")}");
         AppendToLog($"_thumbnailPreviewUrl: {(!string.IsNullOrEmpty(_thumbnailPreviewUrl) ? "Has value" : "NULL/Empty")}");
+        AppendToLog($"_videoWidth: {_videoWidth}, _videoHeight: {_videoHeight}");
+        AppendToLog($"_videoAspectRatio: {_videoAspectRatio:F3}, _needsAspectRatioFix: {_needsAspectRatioFix}");
 
         if (_selectedThumbnailFile != null)
         {

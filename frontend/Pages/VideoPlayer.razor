@@ -23,6 +23,8 @@
         {
             <MudStack Spacing="3">
                 <video controls style="width: 100%; border-radius: 8px;" autoplay
+                       crossorigin="anonymous"
+                       @key="@VideoId"
                        @onplaying="RegisterVideoView">
                     <source src="@GetVideoUrl(videoDetails.Uri)" type="video/mp4">
                     Your browser does not support the video tag.
@@ -52,12 +54,45 @@
 
                 @if (!string.IsNullOrEmpty(videoDetails.Description))
                 {
-                    <MudExpansionPanels>
-                        <MudExpansionPanel Text="Descripción">
-                            <MudText Typo="Typo.body1">@videoDetails.Description</MudText>
-                        </MudExpansionPanel>
-                    </MudExpansionPanels>
+                    <MudPaper Class="pa-4 mb-4" Elevation="1">
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.h6">Descripción</MudText>
+
+                            <div class="description-container">
+                                <MudText Typo="Typo.body1"
+                                         Class="@GetDescriptionClass()"
+                                         Style="white-space: pre-wrap; line-height: 1.5;">
+                                    @videoDetails.Description
+                                </MudText>
+
+                                @if (ShouldShowToggleButton(videoDetails.Description))
+                                {
+                                    <MudButton Variant="Variant.Text"
+                                               Color="Color.Primary"
+                                               Size="Size.Small"
+                                               OnClick="ToggleDescription"
+                                               Class="mt-2">
+                                        @(isDescriptionExpanded ? "Mostrar menos" : "Mostrar más")
+                                    </MudButton>
+                                }
+                            </div>
+                        </MudStack>
+                    </MudPaper>
                 }
+
+                <style>
+                    .description-collapsed {
+                        display: -webkit-box;
+                        -webkit-line-clamp: 3;
+                        -webkit-box-orient: vertical;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                    }
+
+                    .description-expanded {
+                        /* Mostrar todo el contenido */
+                    }
+                </style>
 
                 <MudDivider />
 
@@ -131,6 +166,10 @@
                 }
             </MudStack>
         }
+        else
+        {
+            <MudAlert Severity="Severity.Info">No hay videos relacionados disponibles.</MudAlert>
+        }
     </MudItem>
 </MudGrid>
 
@@ -144,35 +183,65 @@
     private bool isLoading = true;
     private bool isCommentsLoading = true;
     private bool isRelatedVideosLoading = true;
+    private bool isDescriptionExpanded = false;
 
+    private long _previousVideoId = 0;
     private long? replyToCommentId;
     private string? replyToUserName;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadVideoDetails();
-        await LoadComments();
-        await LoadRelatedVideos();
+        _previousVideoId = VideoId;
+        await LoadAllData();
     }
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
-        if (VideoId > 0)
+        // Solo recargar si el VideoId realmente ha cambiado
+        if (VideoId > 0 && VideoId != _previousVideoId)
         {
-            // Solo recargar si el VideoId ha cambiado (navegación entre videos relacionados)
-            Task.Run(async () =>
-            {
-                await LoadVideoDetails();
-                await LoadComments();
-                await LoadRelatedVideos();
+            _previousVideoId = VideoId;
 
-                // Resetear estado de UI
-                replyToCommentId = null;
-                replyToUserName = null;
+            // Resetear todos los estados inmediatamente
+            ResetAllStates();
 
-                await InvokeAsync(StateHasChanged);
-            });
+            // Forzar actualización de UI para mostrar los skeletons
+            StateHasChanged();
+
+            // Cargar nuevos datos
+            await LoadAllData();
         }
+    }
+
+    private void ResetAllStates()
+    {
+        // Resetear estados de carga
+        isLoading = true;
+        isCommentsLoading = true;
+        isRelatedVideosLoading = true;
+        isDescriptionExpanded = false;
+
+        // Limpiar datos anteriores
+        videoDetails = null;
+        comments.Clear();
+        relatedVideos.Clear();
+
+        // Resetear estado de UI de comentarios
+        replyToCommentId = null;
+        replyToUserName = null;
+    }
+
+    private async Task LoadAllData()
+    {
+        // Cargar datos en paralelo para mejor rendimiento
+        var tasks = new List<Task>
+        {
+            LoadVideoDetails(),
+            LoadComments(),
+            LoadRelatedVideos()
+        };
+
+        await Task.WhenAll(tasks);
     }
 
     private async Task LoadVideoDetails()
@@ -181,10 +250,16 @@
         try
         {
             videoDetails = await InteractionService.GetVideoDetails(VideoId);
+
+            if (videoDetails == null)
+            {
+                Snackbar.Add("El video no se pudo cargar", Severity.Warning);
+            }
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error al cargar el video: {ex.Message}", Severity.Error);
+            Console.WriteLine($"Error loading video details: {ex}");
         }
         finally
         {
@@ -203,6 +278,8 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Error al cargar los comentarios: {ex.Message}", Severity.Error);
+            Console.WriteLine($"Error loading comments: {ex}");
+            comments = new List<CommentDto>(); // Asegurar que no sea null
         }
         finally
         {
@@ -216,19 +293,17 @@
         isRelatedVideosLoading = true;
         try
         {
-            // To do: En una implementación real, habría un endpoint específico para videos relacionados
-            // Por ahora, simplemente obtenemos algunos videos y filtramos el actual
             var allVideos = await InteractionService.GetAllVideos();
             relatedVideos = allVideos?
                 .Where(v => v.Id != VideoId)
-                .OrderBy(x => Guid.NewGuid())  // ← LÍNEA AGREGADA para randomizar
-                .Take(10)
+                .OrderBy(x => Guid.NewGuid())
+                .Take(8) // Reducir a 8 para mejor rendimiento
                 .ToList() ?? new List<VideoDto>();
         }
-        catch
+        catch (Exception ex)
         {
-            // Silenciar errores, los videos relacionados no son críticos
-            relatedVideos = new List<VideoDto>();
+            Console.WriteLine($"Error loading related videos: {ex}");
+            relatedVideos = new List<VideoDto>(); // Silenciar errores, no es crítico
         }
         finally
         {
@@ -239,6 +314,9 @@
 
     private string GetVideoUrl(string uri)
     {
+        if (string.IsNullOrEmpty(uri))
+            return string.Empty;
+
         if (uri.StartsWith("http"))
             return uri;
 
@@ -249,6 +327,25 @@
     private string? GetUploaderProfilePicture()
     {
         return videoDetails?.UploadedByUserProfilePictureUrl;
+    }
+
+    private string GetDescriptionClass()
+    {
+        return isDescriptionExpanded ? "description-expanded" : "description-collapsed";
+    }
+
+    private bool ShouldShowToggleButton(string description)
+    {
+        if (string.IsNullOrEmpty(description))
+            return false;
+
+        // Mostrar botón si la descripción tiene más de 200 caracteres o más de 3 líneas
+        return description.Length > 200 || description.Split('\n').Length > 3;
+    }
+
+    private void ToggleDescription()
+    {
+        isDescriptionExpanded = !isDescriptionExpanded;
     }
 
     #region Comment Handlers
@@ -403,11 +500,13 @@
                 // Actualizar estado local
                 videoDetails.UserHasViewed = true;
                 videoDetails.ViewsCount++;
+                StateHasChanged();
             }
         }
-        catch
+        catch (Exception ex)
         {
             // Silenciar errores de vista, no crítico para la UX
+            Console.WriteLine($"Error registering video view: {ex}");
         }
     }
 
@@ -435,7 +534,7 @@
                 if (success)
                 {
                     videoDetails.UserHasLiked = false;
-                    videoDetails.LikesCount--;
+                    videoDetails.LikesCount = Math.Max(0, videoDetails.LikesCount - 1);
                     Snackbar.Add("Video eliminado de Me gusta", Severity.Info);
                 }
             }
@@ -475,7 +574,7 @@
                 if (success)
                 {
                     videoDetails.UserHasFavorited = false;
-                    videoDetails.FavoritesCount--;
+                    videoDetails.FavoritesCount = Math.Max(0, videoDetails.FavoritesCount - 1);
                     Snackbar.Add("Video eliminado de Favoritos", Severity.Info);
                 }
             }

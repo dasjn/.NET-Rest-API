@@ -28,7 +28,7 @@ namespace IA.WebAPI.Models.DTOs
         /// <summary>
         /// Descripción del video
         /// </summary>
-        [StringLength(1000, ErrorMessage = "Description cannot exceed 1000 characters")]
+        [StringLength(10000, ErrorMessage = "Description cannot exceed 5000 characters")]
         public string? Description { get; set; }
     }
 }

@@ -420,8 +420,7 @@ namespace IA.WebAPI.Services
                 string targetDirectory = _localUploadsBaseDirectory;
                 if (!string.IsNullOrWhiteSpace(subDirectory))
                 {
-                    // Sanitizar subdirectorio
-                    subDirectory = Regex.Replace(subDirectory, @"[^\w\d]", "_");
+                    // NO sanitizar el subdirectorio para mantener nombres como "Videos" y "Thumbnails"
                     targetDirectory = Path.Combine(_localUploadsBaseDirectory, subDirectory);
 
                     if (!Directory.Exists(targetDirectory))
@@ -438,9 +437,9 @@ namespace IA.WebAPI.Services
                     await file.CopyToAsync(stream);
                 }
 
-                // Devolver ruta relativa
+                // Devolver ruta relativa con separadores correctos
                 string relativePath = subDirectory.Length > 0
-                    ? Path.Combine(subDirectory, uniqueFileName)
+                    ? Path.Combine(subDirectory, uniqueFileName).Replace("\\", "/")
                     : uniqueFileName;
 
                 _logger.LogInformation("File saved locally: {FilePath}", relativePath);
@@ -483,7 +482,16 @@ namespace IA.WebAPI.Services
         private string GetLocalFileUrl(string fileName)
         {
             string sanitizedFileName = SanitizeFilePath(fileName);
-            return $"/Uploads/{sanitizedFileName}";
+
+            // Asegurar que la URL siempre tenga el prefijo /Uploads/
+            if (sanitizedFileName.StartsWith("Uploads/"))
+            {
+                return $"/{sanitizedFileName}";
+            }
+            else
+            {
+                return $"/Uploads/{sanitizedFileName}";
+            }
         }
 
         private async Task<byte[]> GetFileFromLocalAsync(string filePath)

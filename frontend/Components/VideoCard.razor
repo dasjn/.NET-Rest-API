@@ -7,9 +7,12 @@
 <MudItem xs="12" sm="6" md="4" lg="3">
     <MudLink Href="@($"/video/{VideoId}")">
         <MudCard Class="d-flex flex-column" Style="height: 100%; min-height: 300px;">
-            <MudCardMedia Image="@VideoUtils.GetVideoThumbnail(VideoId, ThumbnailUri, VideoService)"
-                          Height="225"
-                          Style="aspect-ratio: 16/9; object-fit: cover;" />
+            <MudImage Src="@VideoUtils.GetVideoThumbnail(VideoId, ThumbnailUri, VideoService)"
+                      Alt="Thumbnail"
+                      Class="rounded-2"
+                      ObjectFit="ObjectFit.Cover"
+                      Style="width: 100%; aspect-ratio: 16/9;"
+                      UserAttributes="@(new Dictionary<string, object> { ["crossorigin"] = "anonymous" })" />
             <MudCardContent Class="flex-grow-1 d-flex flex-column">
                 <MudText Typo="Typo.subtitle1"
                          Class="mud-typography-ellipsis-2 flex-grow-1"

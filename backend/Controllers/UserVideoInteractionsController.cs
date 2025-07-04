@@ -4,6 +4,8 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using IA.WebAPI.Models;
+using IA.WebAPI.Models.DTOs;
+using IA.WebAPI.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -21,13 +23,16 @@ namespace IA.WebAPI.Controllers
     {
         private readonly IAContext _context;
         private readonly ILogger<UserVideoInteractionsController> _logger;
+        private readonly IFileStorageService _fileService;
 
         public UserVideoInteractionsController(
             IAContext context,
-            ILogger<UserVideoInteractionsController> logger)
+            ILogger<UserVideoInteractionsController> logger,
+            IFileStorageService fileService)
         {
             _context = context;
             _logger = logger;
+            _fileService = fileService;
         }
 
         #region Obtener videos por tipo de interacción
@@ -37,8 +42,8 @@ namespace IA.WebAPI.Controllers
         /// </summary>
         /// <returns>Lista de videos que le gustan al usuario</returns>
         [HttpGet("likes")]
-        [ProducesResponseType(typeof(IEnumerable<Video>), StatusCodes.Status200OK)]
-        public async Task<ActionResult<IEnumerable<Video>>> GetUserLikedVideos()
+        [ProducesResponseType(typeof(IEnumerable<VideoDto>), StatusCodes.Status200OK)]
+        public async Task<ActionResult<IEnumerable<VideoDto>>> GetUserLikedVideos()
         {
             return await GetVideosByInteractionType(InteractionType.Like);
         }
@@ -47,7 +52,7 @@ namespace IA.WebAPI.Controllers
         /// Obtiene los videos favoritos del usuario autenticado
         /// </summary>
         [HttpGet("favorites")]
-        public async Task<ActionResult<IEnumerable<Video>>> GetUserFavoriteVideos()
+        public async Task<ActionResult<IEnumerable<VideoDto>>> GetUserFavoriteVideos()
         {
             return await GetVideosByInteractionType(InteractionType.Favorite);
         }
@@ -56,7 +61,7 @@ namespace IA.WebAPI.Controllers
         /// Obtiene los videos marcados para ver más tarde por el usuario autenticado
         /// </summary>
         [HttpGet("watch-later")]
-        public async Task<ActionResult<IEnumerable<Video>>> GetWatchLaterVideos()
+        public async Task<ActionResult<IEnumerable<VideoDto>>> GetWatchLaterVideos()
         {
             return await GetVideosByInteractionType(InteractionType.WatchLater);
         }
@@ -65,7 +70,7 @@ namespace IA.WebAPI.Controllers
         /// Obtiene los videos vistos por el usuario autenticado (historial)
         /// </summary>
         [HttpGet("history")]
-        public async Task<ActionResult<IEnumerable<Video>>> GetViewedVideos()
+        public async Task<ActionResult<IEnumerable<VideoDto>>> GetViewedVideos()
         {
             return await GetVideosByInteractionType(InteractionType.View);
         }
@@ -73,19 +78,64 @@ namespace IA.WebAPI.Controllers
         /// <summary>
         /// Método común para obtener videos por tipo de interacción
         /// </summary>
-        private async Task<ActionResult<IEnumerable<Video>>> GetVideosByInteractionType(InteractionType type)
+        private async Task<ActionResult<IEnumerable<VideoDto>>> GetVideosByInteractionType(InteractionType type)
         {
             var userId = GetCurrentUserId();
             if (userId == null) return Unauthorized();
 
             try
             {
-                var videos = await _context.VideoInteractions
+                // Cambiar para retornar VideoDto con URLs correctas
+                var videosQuery = _context.VideoInteractions
                     .Where(i => i.UserId == userId.Value && i.Type == type)
                     .Include(i => i.Video)
+                    .ThenInclude(v => v.UploadedByUser)
                     .OrderByDescending(i => i.CreatedAt)
-                    .Select(i => i.Video)
+                    .Select(i => new VideoDto
+                    {
+                        Id = i.Video.Id,
+                        Name = i.Video.Name,
+                        Description = i.Video.Description,
+                        PublishDate = i.Video.PublishDate,
+                        Uri = i.Video.Uri, // Se corregirá después con ApplyCorrectUrls
+                        ThumbnailUri = i.Video.ThumbnailUri, // Se corregirá después con ApplyCorrectUrls
+                        UploadedByUserId = i.Video.UploadedByUserId,
+                        UploadedByUserName = i.Video.UploadedByUser != null ? i.Video.UploadedByUser.Name : null,
+                        UploadedByUserProfilePictureUrl = i.Video.UploadedByUser != null ? i.Video.UploadedByUser.ProfilePictureUrl : null,
+                        LikesCount = i.Video.Interactions.Count(interaction => interaction.Type == InteractionType.Like),
+                        FavoritesCount = i.Video.Interactions.Count(interaction => interaction.Type == InteractionType.Favorite),
+                        ViewsCount = i.Video.Interactions.Count(interaction => interaction.Type == InteractionType.View),
+                        CommentsCount = i.Video.Comments.Count
+                    });
+
+                var videos = await videosQuery.ToListAsync();
+
+                // Aplicar URLs correctas (Azure Blob Storage con SAS tokens)
+                videos = ApplyCorrectUrls(videos);
+
+                // Agregar información de interacciones del usuario actual
+                var userInteractions = await _context.VideoInteractions
+                    .Where(i => i.UserId == userId.Value)
+                    .Select(i => new { i.VideoId, i.Type })
                     .ToListAsync();
+
+                var interactionsByVideo = userInteractions
+                    .GroupBy(i => i.VideoId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(i => i.Type).ToList()
+                    );
+
+                foreach (var video in videos)
+                {
+                    if (interactionsByVideo.TryGetValue(video.Id, out var interactions))
+                    {
+                        video.UserHasLiked = interactions.Contains(InteractionType.Like);
+                        video.UserHasFavorited = interactions.Contains(InteractionType.Favorite);
+                        video.UserHasWatchLater = interactions.Contains(InteractionType.WatchLater);
+                        video.UserHasViewed = interactions.Contains(InteractionType.View);
+                    }
+                }
 
                 return Ok(videos);
             }
@@ -228,8 +278,8 @@ namespace IA.WebAPI.Controllers
                 {
                     var existingInteraction = await _context.VideoInteractions
                         .FirstOrDefaultAsync(i => i.UserId == userId.Value
-                                               && i.VideoId == videoId
-                                               && i.Type == type);
+                                                   && i.VideoId == videoId
+                                                   && i.Type == type);
 
                     if (existingInteraction != null)
                     {
@@ -272,8 +322,8 @@ namespace IA.WebAPI.Controllers
                 // Buscar la interacción a eliminar
                 IQueryable<VideoInteraction> interactionsQuery = _context.VideoInteractions
                     .Where(i => i.UserId == userId.Value
-                             && i.VideoId == videoId
-                             && i.Type == type);
+                                 && i.VideoId == videoId
+                                 && i.Type == type);
 
                 // Si removeAll es false, solo eliminar una interacción
                 if (!removeAll)
@@ -328,6 +378,42 @@ namespace IA.WebAPI.Controllers
             }
 
             return userId;
+        }
+
+        #endregion
+
+        #region URL Helper Methods
+
+        /// <summary>
+        /// Aplica las URLs correctas (local o blob storage) a un VideoDto
+        /// </summary>
+        private VideoDto ApplyCorrectUrls(VideoDto video)
+        {
+            // Aplicar URL correcta para el video
+            if (!string.IsNullOrEmpty(video.Uri))
+            {
+                video.Uri = _fileService.GetFileUrl(video.Uri);
+            }
+
+            // Aplicar URL correcta para el thumbnail
+            if (!string.IsNullOrEmpty(video.ThumbnailUri))
+            {
+                video.ThumbnailUri = _fileService.GetFileUrl(video.ThumbnailUri);
+            }
+
+            return video;
+        }
+
+        /// <summary>
+        /// Aplica las URLs correctas a una lista de VideoDto
+        /// </summary>
+        private List<VideoDto> ApplyCorrectUrls(List<VideoDto> videos)
+        {
+            foreach (var video in videos)
+            {
+                ApplyCorrectUrls(video);
+            }
+            return videos;
         }
 
         #endregion
