@@ -1,0 +1,303 @@
+﻿@page "/history"
+@using IA.FrontEnd.Components
+@using IA.FrontEnd.Models
+@using IA.FrontEnd.Services
+@using MudBlazor.Services
+@implements IBrowserViewportObserver
+@implements IAsyncDisposable
+@inject VideoInteractionService InteractionService
+@inject ISnackbar Snackbar
+@inject IBrowserViewportService BrowserViewportService
+
+<PageTitle>Historial - Interventional Academy</PageTitle>
+
+<MudStack Row="@_row" Reverse="false" Breakpoint="@_breakpoint" Class="mb-4">
+    <MudText Typo="Typo.h4">@GetPageTitle()</MudText>
+    <MudSpacer />
+    <div class="@(_currentBreakpoint <= Breakpoint.Sm ? "w-100" : "")">
+        <SearchComponent @ref="searchComponent"
+                         Context="history"
+                         OnSearch="HandleSearch"
+                         Style="@(_currentBreakpoint <= Breakpoint.Sm ? "width: 100%" : "width: 100%; max-width: 300px;")" />
+    </div>
+</MudStack>
+
+@if (!string.IsNullOrEmpty(_currentSearchQuery))
+{
+    <MudStack Row="@_row" Reverse="false" Breakpoint="@_breakpoint" Class="mb-4">
+        <MudAlert Severity="Severity.Info" Class="@(_currentBreakpoint <= Breakpoint.Sm ? "w-100" : "")">
+            Mostrando resultados para: "@_currentSearchQuery"
+        </MudAlert>
+        <MudSpacer />
+        <div class="@(_currentBreakpoint <= Breakpoint.Sm ? "w-100 mt-2" : "")">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Clear"
+                       OnClick="ClearSearch"
+                       Class="@(_currentBreakpoint <= Breakpoint.Sm ? "w-100" : "")">
+                Limpiar Búsqueda
+            </MudButton>
+        </div>
+    </MudStack>
+}
+
+<InfiniteScrollContainer OnLoadMore="LoadMoreVideos"
+                         IsLoading="_scrollService.IsLoading"
+                         HasReachedEnd="_scrollService.HasReachedEnd">
+
+    @if (_scrollService.Items.Count == 0 && !_scrollService.IsLoading)
+    {
+        <MudItem xs="12">
+            <MudPaper Class="pa-6" Elevation="3">
+                <MudStack Spacing="4" AlignItems="AlignItems.Center">
+                    @if (!string.IsNullOrEmpty(_currentSearchQuery))
+                    {
+                        <MudIcon Icon="@Icons.Material.Outlined.SearchOff" Size="Size.Large" />
+                        <MudText Typo="Typo.h6" Align="Align.Center">
+                            No se encontraron resultados para "@_currentSearchQuery" en tu historial
+                        </MudText>
+                        <MudText Typo="Typo.body1" Align="Align.Center">
+                            Intenta con diferentes términos de búsqueda o explora más videos
+                        </MudText>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ClearSearch">
+                            Ver todo el historial
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Outlined.History" Size="Size.Large" />
+                        <MudText Typo="Typo.h6" Align="Align.Center">
+                            Tu historial está vacío
+                        </MudText>
+                        <MudText Typo="Typo.body1" Align="Align.Center">
+                            Los videos que veas aparecerán aquí para que puedas retomar fácilmente tu aprendizaje
+                        </MudText>
+                        <MudButton Href="/" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.VideoLibrary">
+                            Explorar Videos
+                        </MudButton>
+                    }
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    }
+    else
+    {
+        <MudGrid Justify="Justify.FlexStart" AlignItems="AlignItems.Start" Spacing="4">
+            @if (_initialLoading)
+            {
+                <VideoCardSkeletonWrapper />
+            }
+            else
+            {
+                @foreach (var video in _scrollService.Items)
+                {
+                    <VideoCard VideoId="video.Id"
+                               Title="@video.Name"
+                               ChannelName="@video.UploadedByUserName"
+                               Views="@video.ViewsCount"
+                               ThumbnailUri="@video.ThumbnailUri"
+                               PublishedDate="@video.PublishDate" />
+                }
+            }
+        </MudGrid>
+
+        @if (_scrollService.Items.Count > 0 && string.IsNullOrEmpty(_currentSearchQuery))
+        {
+            <MudDivider Class="my-4" />
+
+            <MudPaper Class="pa-4 mt-2" Elevation="0">
+                <MudText Typo="Typo.subtitle1" Class="mb-2">Gestionar historial</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                    Tu historial se almacena y puede ser eliminado en cualquier momento. Los videos aparecen ordenados por fecha de visualización, del más reciente al más antiguo.
+                </MudText>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.DeleteSweep"
+                           OnClick="@(() => OpenClearConfirmationDialog())">
+                    Borrar historial
+                </MudButton>
+            </MudPaper>
+        }
+    }
+</InfiniteScrollContainer>
+
+@code {
+    private readonly InfiniteScrollService<VideoDto> _scrollService = new();
+    private SearchComponent? searchComponent;
+    private string _currentSearchQuery = string.Empty;
+    private bool _initialLoading = true;
+
+    // Responsive variables
+    private Breakpoint _breakpoint = Breakpoint.SmAndDown;
+    private bool _row = true;
+    private Breakpoint _currentBreakpoint = Breakpoint.Md;
+
+    [Inject] private IDialogService DialogService { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _scrollService.OnStateChanged += StateHasChanged;
+        await LoadInitialData();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await BrowserViewportService.SubscribeAsync(this, fireImmediately: true);
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task LoadInitialData()
+    {
+        _initialLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            if (string.IsNullOrEmpty(_currentSearchQuery))
+            {
+                await _scrollService.LoadInitialData(LoadHistoryVideosPage);
+            }
+            else
+            {
+                await _scrollService.Search(_currentSearchQuery, SearchHistoryVideosPage);
+            }
+        }
+        finally
+        {
+            _initialLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadMoreVideos()
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(_currentSearchQuery))
+            {
+                await _scrollService.LoadMoreData(LoadHistoryVideosPage);
+            }
+            else
+            {
+                await _scrollService.LoadMoreDataWithSearch(_currentSearchQuery, SearchHistoryVideosPage);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading more videos: {ex.Message}");
+            Snackbar.Add("Error al cargar más videos", Severity.Warning);
+        }
+    }
+
+    private async Task<List<VideoDto>> LoadHistoryVideosPage(int skip, int take)
+    {
+        return await InteractionService.GetViewedVideosWithPagination(skip, take);
+    }
+
+    private async Task<List<VideoDto>> SearchHistoryVideosPage(string query, int skip, int take)
+    {
+        return await InteractionService.SearchVideosWithContext(query, "history", skip, take);
+    }
+
+    private async Task HandleSearch(string query)
+    {
+        _currentSearchQuery = query;
+        _initialLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            if (string.IsNullOrEmpty(query))
+            {
+                await _scrollService.LoadInitialData(LoadHistoryVideosPage);
+            }
+            else
+            {
+                await _scrollService.Search(query, SearchHistoryVideosPage);
+            }
+        }
+        finally
+        {
+            _initialLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ClearSearch()
+    {
+        _currentSearchQuery = string.Empty;
+        searchComponent?.Clear();
+        await HandleSearch(string.Empty);
+    }
+
+    private async Task OpenClearConfirmationDialog()
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Confirmar eliminación",
+            "¿Estás seguro que deseas borrar todo tu historial de visualización? Esta acción no se puede deshacer.",
+            yesText: "Borrar historial",
+            cancelText: "Cancelar");
+
+        if (result == true)
+        {
+            await ClearHistory();
+        }
+    }
+
+    private async Task ClearHistory()
+    {
+        try
+        {
+            bool success = await InteractionService.ClearHistory();
+
+            if (success)
+            {
+                _currentSearchQuery = string.Empty;
+                searchComponent?.Clear();
+                await LoadInitialData(); // Recargar datos
+                Snackbar.Add("Historial eliminado correctamente", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("No se pudo eliminar el historial", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private string GetPageTitle()
+    {
+        if (!string.IsNullOrEmpty(_currentSearchQuery))
+        {
+            return $"Resultados para \"{_currentSearchQuery}\" en Historial";
+        }
+        return _scrollService.Items.Count > 0 ? "Historial de visualización" : "Historial de visualización";
+    }
+
+    // IBrowserViewportObserver implementation
+    Guid IBrowserViewportObserver.Id { get; } = Guid.NewGuid();
+
+    ResizeOptions IBrowserViewportObserver.ResizeOptions { get; } = new()
+        {
+            ReportRate = 250,
+            NotifyOnBreakpointOnly = true
+        };
+
+    Task IBrowserViewportObserver.NotifyBrowserViewportChangeAsync(BrowserViewportEventArgs args)
+    {
+        _currentBreakpoint = args.Breakpoint;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _scrollService.OnStateChanged -= StateHasChanged;
+        await BrowserViewportService.UnsubscribeAsync(this);
+    }
+}

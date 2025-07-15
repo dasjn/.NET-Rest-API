@@ -1,0 +1,130 @@
+﻿@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+
+<div @ref="scrollContainer" class="infinite-scroll-container" style="@ContainerStyle">
+    @ChildContent
+
+    @if (IsLoading)
+    {
+        <div class="d-flex justify-center pa-4">
+            <MudProgressCircular Indeterminate="true" Size="Size.Medium" />
+            <MudText Typo="Typo.body2" Class="ml-2">Cargando más videos...</MudText>
+        </div>
+    }
+
+    @if (HasReachedEnd && !IsLoading)
+    {
+        <div class="d-flex justify-center pa-4">
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                No hay más videos para mostrar
+            </MudText>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnLoadMore { get; set; }
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public bool HasReachedEnd { get; set; }
+    [Parameter] public string ContainerStyle { get; set; } = string.Empty;
+    [Parameter] public int ThresholdPixels { get; set; } = 200; // Cuántos píxeles antes del final activar la carga
+
+    private ElementReference scrollContainer;
+    private DotNetObjectReference<InfiniteScrollContainer>? objRef;
+    private bool isInitialized = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            objRef = DotNetObjectReference.Create(this);
+            await JSRuntime.InvokeVoidAsync("initializeInfiniteScroll", scrollContainer, objRef, ThresholdPixels);
+            isInitialized = true;
+        }
+    }
+
+    [JSInvokable]
+    public async Task LoadMoreContent()
+    {
+        if (!IsLoading && !HasReachedEnd && OnLoadMore.HasDelegate)
+        {
+            await OnLoadMore.InvokeAsync();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (isInitialized && objRef != null)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("disposeInfiniteScroll", scrollContainer);
+            }
+            catch (JSDisconnectedException)
+            {
+                // Ignorar si la conexión JS ya se perdió
+            }
+        }
+
+        objRef?.Dispose();
+    }
+}
+
+<script>
+    window.infiniteScrollObservers = window.infiniteScrollObservers || new Map();
+
+    window.initializeInfiniteScroll = (element, dotnetHelper, threshold) => {
+        if (!element || window.infiniteScrollObservers.has(element)) {
+            return;
+        }
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    dotnetHelper.invokeMethodAsync('LoadMoreContent');
+                }
+            });
+        }, {
+            rootMargin: `${threshold}px`,
+            threshold: 0.1
+        });
+
+        // Crear un elemento centinela al final del contenedor
+        const sentinel = document.createElement('div');
+        sentinel.style.height = '1px';
+        sentinel.className = 'infinite-scroll-sentinel';
+        element.appendChild(sentinel);
+
+        observer.observe(sentinel);
+        window.infiniteScrollObservers.set(element, { observer, sentinel });
+    };
+
+    window.disposeInfiniteScroll = (element) => {
+        if (!element || !window.infiniteScrollObservers.has(element)) {
+            return;
+        }
+
+        const { observer, sentinel } = window.infiniteScrollObservers.get(element);
+        observer.disconnect();
+
+        if (sentinel && sentinel.parentNode) {
+            sentinel.parentNode.removeChild(sentinel);
+        }
+
+        window.infiniteScrollObservers.delete(element);
+    };
+</script>
+
+<style>
+    .infinite-scroll-container {
+        width: 100%;
+        min-height: 100vh;
+    }
+
+    .infinite-scroll-sentinel {
+        height: 1px;
+        width: 100%;
+    }
+</style>

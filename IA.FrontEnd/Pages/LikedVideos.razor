@@ -1,0 +1,244 @@
+﻿@page "/liked-videos"
+@using IA.FrontEnd.Components
+@using IA.FrontEnd.Models
+@using IA.FrontEnd.Services
+@using MudBlazor.Services
+@implements IBrowserViewportObserver
+@implements IAsyncDisposable
+@inject VideoInteractionService InteractionService
+@inject ISnackbar Snackbar
+
+<PageTitle>Videos que me gustan - Interventional Academy</PageTitle>
+
+<MudStack Row="@_row" Reverse="false" Breakpoint="@_breakpoint" Class="mb-4">
+    <MudText Typo="Typo.h4">@GetPageTitle()</MudText>
+    <MudSpacer />
+    <div class="@(_currentBreakpoint <= Breakpoint.Sm ? "w-100" : "")">
+        <SearchComponent @ref="searchComponent"
+                         Context="liked"
+                         OnSearch="HandleSearch"
+                         Style="@(_currentBreakpoint <= Breakpoint.Sm ? "width: 100%" : "width: 100%; max-width: 300px;")" />
+    </div>
+</MudStack>
+
+@if (!string.IsNullOrEmpty(_currentSearchQuery))
+{
+    <MudStack Row="@_row" Reverse="false" Breakpoint="@_breakpoint" Class="mb-4">
+        <MudAlert Severity="Severity.Info" Class="@(_currentBreakpoint <= Breakpoint.Sm ? "w-100" : "")">
+            Mostrando resultados para: "@_currentSearchQuery"
+        </MudAlert>
+        <MudSpacer />
+        <div class="@(_currentBreakpoint <= Breakpoint.Sm ? "w-100 mt-2" : "")">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Clear"
+                       OnClick="ClearSearch"
+                       Class="@(_currentBreakpoint <= Breakpoint.Sm ? "w-100" : "")">
+                Limpiar Búsqueda
+            </MudButton>
+        </div>
+    </MudStack>
+}
+
+<InfiniteScrollContainer OnLoadMore="LoadMoreVideos"
+                         IsLoading="_scrollService.IsLoading"
+                         HasReachedEnd="_scrollService.HasReachedEnd">
+
+    @if (_scrollService.Items.Count == 0 && !_scrollService.IsLoading)
+    {
+        <MudGrid Justify="Justify.Center" AlignItems="AlignItems.Center" Style="min-height: 60vh;">
+            <MudItem xs="12" Class="text-center">
+                @if (!string.IsNullOrEmpty(_currentSearchQuery))
+                {
+                    <MudStack Spacing="4" AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Outlined.SearchOff" Size="Size.Large" Color="Color.Secondary" />
+                        <MudText Typo="Typo.h6">No se encontraron resultados para "@_currentSearchQuery" en tus videos con Me gusta</MudText>
+                        <MudText Typo="Typo.body1" Color="Color.Secondary">
+                            Intenta con diferentes términos de búsqueda o explora más videos
+                        </MudText>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ClearSearch">
+                            Ver todos los videos con Me gusta
+                        </MudButton>
+                    </MudStack>
+                }
+                else
+                {
+                    <MudStack Spacing="4" AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Outlined.ThumbUp" Size="Size.Large" Color="Color.Secondary" />
+                        <MudText Typo="Typo.h6">Aún no has marcado ningún video como "Me gusta"</MudText>
+                        <MudText Typo="Typo.body1" Color="Color.Secondary">
+                            Explora nuestro catálogo de videos y marca como "Me gusta" aquellos que más te interesen para encontrarlos fácilmente aquí
+                        </MudText>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/" StartIcon="@Icons.Material.Filled.VideoLibrary">
+                            Explorar Videos
+                        </MudButton>
+                    </MudStack>
+                }
+            </MudItem>
+        </MudGrid>
+    }
+    else
+    {
+        <MudGrid Justify="Justify.FlexStart" AlignItems="AlignItems.Start" Spacing="4">
+            @if (_initialLoading)
+            {
+                <VideoCardSkeletonWrapper />
+            }
+            else
+            {
+                @foreach (var video in _scrollService.Items)
+                {
+                    <VideoCard VideoId="video.Id"
+                               Title="@video.Name"
+                               ChannelName="@video.UploadedByUserName"
+                               Views="@video.ViewsCount"
+                               ThumbnailUri="@video.ThumbnailUri"
+                               PublishedDate="@video.PublishDate" />
+                }
+            }
+        </MudGrid>
+    }
+</InfiniteScrollContainer>
+
+@code {
+    private readonly InfiniteScrollService<VideoDto> _scrollService = new();
+    private SearchComponent? searchComponent;
+    private string _currentSearchQuery = string.Empty;
+    private bool _initialLoading = true;
+
+    // Responsive variables
+    private Breakpoint _breakpoint = Breakpoint.SmAndDown;
+    private bool _row = true;
+    private Breakpoint _currentBreakpoint = Breakpoint.Md;
+
+    [Inject] private IBrowserViewportService BrowserViewportService { get; set; } = null!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _scrollService.OnStateChanged += StateHasChanged;
+        await LoadInitialData();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await BrowserViewportService.SubscribeAsync(this, fireImmediately: true);
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task LoadInitialData()
+    {
+        _initialLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            if (string.IsNullOrEmpty(_currentSearchQuery))
+            {
+                await _scrollService.LoadInitialData(LoadLikedVideosPage);
+            }
+            else
+            {
+                await _scrollService.Search(_currentSearchQuery, SearchLikedVideosPage);
+            }
+        }
+        finally
+        {
+            _initialLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadMoreVideos()
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(_currentSearchQuery))
+            {
+                await _scrollService.LoadMoreData(LoadLikedVideosPage);
+            }
+            else
+            {
+                await _scrollService.LoadMoreDataWithSearch(_currentSearchQuery, SearchLikedVideosPage);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading more videos: {ex.Message}");
+            Snackbar.Add("Error al cargar más videos", Severity.Warning);
+        }
+    }
+
+    private async Task<List<VideoDto>> LoadLikedVideosPage(int skip, int take)
+    {
+        return await InteractionService.GetLikedVideosWithPagination(skip, take);
+    }
+
+    private async Task<List<VideoDto>> SearchLikedVideosPage(string query, int skip, int take)
+    {
+        return await InteractionService.SearchVideosWithContext(query, "liked", skip, take);
+    }
+
+    private async Task HandleSearch(string query)
+    {
+        _currentSearchQuery = query;
+        _initialLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            if (string.IsNullOrEmpty(query))
+            {
+                await _scrollService.LoadInitialData(LoadLikedVideosPage);
+            }
+            else
+            {
+                await _scrollService.Search(query, SearchLikedVideosPage);
+            }
+        }
+        finally
+        {
+            _initialLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ClearSearch()
+    {
+        _currentSearchQuery = string.Empty;
+        searchComponent?.Clear();
+        await HandleSearch(string.Empty);
+    }
+
+    private string GetPageTitle()
+    {
+        if (!string.IsNullOrEmpty(_currentSearchQuery))
+        {
+            return $"Resultados para \"{_currentSearchQuery}\" en Videos que me gustan";
+        }
+        return _scrollService.Items.Count > 0 ? "Videos que me gustan" : "Videos que me gustan";
+    }
+
+    // IBrowserViewportObserver implementation
+    Guid IBrowserViewportObserver.Id { get; } = Guid.NewGuid();
+
+    ResizeOptions IBrowserViewportObserver.ResizeOptions { get; } = new()
+        {
+            ReportRate = 250,
+            NotifyOnBreakpointOnly = true
+        };
+
+    Task IBrowserViewportObserver.NotifyBrowserViewportChangeAsync(BrowserViewportEventArgs args)
+    {
+        _currentBreakpoint = args.Breakpoint;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _scrollService.OnStateChanged -= StateHasChanged;
+        await BrowserViewportService.UnsubscribeAsync(this);
+    }
+}
